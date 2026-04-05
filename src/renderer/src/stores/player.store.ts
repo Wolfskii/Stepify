@@ -4,6 +4,15 @@ import type { DanceId, PlaybackState, RepeatMode, Track } from '@shared/types'
 import { derived, get, writable } from 'svelte/store'
 import { libraryActions, libraryState } from './library.store'
 
+function clearDeferIfPlaybackTrackChanged(
+  prevId: string | null | undefined,
+  nextId: string | null | undefined,
+) {
+  if (prevId !== nextId) {
+    libraryActions.clearDeferredListPopularity()
+  }
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const initialState: PlaybackState = {
@@ -71,6 +80,8 @@ export const listenerDuration = derived(playerState, ($s) =>
 
 export const playerActions = {
   setTrack(track: Track) {
+    const prev = get(playerState).track?.id
+    clearDeferIfPlaybackTrackChanged(prev, track.id)
     playerState.update((s) => ({
       ...s,
       track,
@@ -136,7 +147,9 @@ export const playerActions = {
     listDanceId: DanceId | null = null,
     listFolderPath: string | null = null,
   ) {
+    const s0 = get(playerState)
     const t = tracks[startIndex] ?? null
+    clearDeferIfPlaybackTrackChanged(s0.track?.id, t?.id)
     playerState.update((s) => ({
       ...s,
       queue: tracks,
@@ -180,6 +193,7 @@ export const playerActions = {
     }
 
     const t = q[nextIndex]
+    clearDeferIfPlaybackTrackChanged(s.track?.id, t.id)
     playerState.update((x) => ({
       ...x,
       queueIndex: nextIndex,
@@ -203,6 +217,7 @@ export const playerActions = {
     }
 
     const t = q[prevIndex]
+    clearDeferIfPlaybackTrackChanged(s.track?.id, t.id)
     playerState.update((x) => ({
       ...x,
       queueIndex: prevIndex,
@@ -246,6 +261,7 @@ export const playerActions = {
     }
 
     const t = q[nextIndex]
+    clearDeferIfPlaybackTrackChanged(state.track?.id, t.id)
     playerState.update((s) => ({
       ...s,
       queueIndex: nextIndex,
@@ -296,6 +312,7 @@ export const playerActions = {
     const remove = new Set(trackIds)
     playerState.update((s) => {
       if (s.track && remove.has(s.track.id)) {
+        libraryActions.clearDeferredListPopularity()
         return {
           ...s,
           track: null,

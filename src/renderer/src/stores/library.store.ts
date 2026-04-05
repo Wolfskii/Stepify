@@ -41,6 +41,11 @@ interface LibraryState {
     folderPath: string | null
     searchQuery: string
   } | null
+  /**
+   * List sort + row popularity readout use this score when set; persisted `Track.popularityScore` stays updated.
+   * Used when liking or disliking the **currently playing** track so the list does not resort mid-session (avoids queue/order surprises).
+   */
+  deferredListPopularityByTrackId: Record<string, number>
 }
 
 const initialState: LibraryState = {
@@ -55,6 +60,7 @@ const initialState: LibraryState = {
   selectionAnchorIndex: null,
   shuffleQueueOrderIds: null,
   shuffleDisplayContext: null,
+  deferredListPopularityByTrackId: {},
 }
 
 export const libraryState = writable<LibraryState>(initialState)
@@ -89,7 +95,7 @@ export const filteredTracks = derived(libraryState, ($s) => {
       return na - nb
     })
   } else {
-    tracks = sortTracksByPopularity(tracks)
+    tracks = sortTracksByPopularity(tracks, $s.deferredListPopularityByTrackId)
   }
 
   return tracks
@@ -195,7 +201,16 @@ async function handleAddLibraryPathsResponse(data: AddLibraryPathsResult): Promi
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export const libraryActions = {
+  clearDeferredListPopularity() {
+    libraryState.update((s) =>
+      Object.keys(s.deferredListPopularityByTrackId).length === 0
+        ? s
+        : { ...s, deferredListPopularityByTrackId: {} },
+    )
+  },
+
   setTracks(tracks: Track[]) {
+    libraryActions.clearDeferredListPopularity()
     libraryState.update((s) => ({ ...s, tracks }))
   },
 
@@ -336,6 +351,7 @@ export const libraryActions = {
     })
 
     if (!sameDanceReselect) {
+      libraryActions.clearDeferredListPopularity()
       void clearShuffleListOrdering()
     }
   },
@@ -364,6 +380,7 @@ export const libraryActions = {
         selectionAnchorIndex: null,
       }
     })
+    libraryActions.clearDeferredListPopularity()
     void clearShuffleListOrdering()
   },
 
@@ -547,6 +564,9 @@ export const libraryActions = {
     const prev = get(libraryState)
     const hadShuffleOrder =
       prev.shuffleQueueOrderIds != null || prev.shuffleDisplayContext != null
+    if (prev.searchQuery !== query) {
+      libraryActions.clearDeferredListPopularity()
+    }
     libraryState.update((s) => ({ ...s, searchQuery: query }))
     if (hadShuffleOrder) {
       void clearShuffleListOrdering()
@@ -596,8 +616,10 @@ export const libraryActions = {
     const listDanceId = p.playbackListFolderPath ? null : p.playbackListDanceId
     const listFolderPath = p.playbackListFolderPath
 
+    const defer = l.deferredListPopularityByTrackId
+
     if (p.shuffle) {
-      const sorted = sortTracksByPopularity(merged)
+      const sorted = sortTracksByPopularity(merged, defer)
       const cur = p.track
       const idx = cur ? sorted.findIndex((t) => t.id === cur.id) : 0
       const start = idx >= 0 ? idx : 0
@@ -616,9 +638,9 @@ export const libraryActions = {
     if (cur && merged.some((t) => t.id === cur.id)) {
       const rest = merged.filter((t) => t.id !== cur.id)
       const enrichedCur = byId.get(cur.id) ?? cur
-      queue = [enrichedCur, ...weightedShuffleByPopularity(rest)]
+      queue = [enrichedCur, ...weightedShuffleByPopularity(rest, defer)]
     } else {
-      queue = weightedShuffleByPopularity([...merged])
+      queue = weightedShuffleByPopularity([...merged], defer)
     }
 
     const curIdx = cur ? queue.findIndex((t) => t.id === cur.id) : 0
@@ -640,17 +662,36 @@ export const libraryActions = {
   },
 
   async voteTrackPopularity(trackId: string, delta: 1 | -1): Promise<boolean> {
+    const before = get(libraryState).tracks.find((x) => x.id === trackId)
+    if (!before) {
+      uiActions.notify('Track not found', 'warning')
+      return false
+    }
+
     const r = await window.electronAPI.library.adjustTrackPopularity(trackId, delta)
     if (!r.success || !r.data) {
       uiActions.notify(r.error ?? 'Could not save like/dislike', 'warning')
       return false
     }
     const t = r.data
-    libraryState.update((s) => ({
-      ...s,
-      tracks: s.tracks.map((x) => (x.id === t.id ? t : x)),
-    }))
-    const { playerActions } = await import('./player.store')
+
+    const { playerActions, playerState } = await import('./player.store')
+    const playingId = get(playerState).track?.id
+
+    libraryState.update((s) => {
+      let defer = { ...s.deferredListPopularityByTrackId }
+      if (playingId === trackId) {
+        const prevListScore = defer[trackId] ?? before.popularityScore ?? 0
+        defer[trackId] = prevListScore
+      } else {
+        delete defer[trackId]
+      }
+      return {
+        ...s,
+        tracks: s.tracks.map((x) => (x.id === t.id ? t : x)),
+        deferredListPopularityByTrackId: defer,
+      }
+    })
     playerActions.mergeTrackFromLibrary(t)
     return true
   },
@@ -713,6 +754,7 @@ export const libraryActions = {
       playerActions.onLibraryRemovedTracks(removed)
     }
     libraryActions.mergeTracksFromScan(data.tracks)
+    libraryActions.clearDeferredListPopularity()
     await libraryActions.refreshLibraryDirectories()
     for (const id of data.changedTrackIds ?? []) {
       const t = get(libraryState).tracks.find((x) => x.id === id)

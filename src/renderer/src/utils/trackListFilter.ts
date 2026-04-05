@@ -50,19 +50,32 @@ export function filterTracksForListView(
   return out
 }
 
-export function sortTracksByPopularity(tracks: Track[]): Track[] {
+/** Popularity used for list order / shuffle weights; `listDefer` overrides stored score (e.g. like/dislike while that track is playing). */
+export function listPopularityForSort(t: Track, listDefer?: Record<string, number> | null): number {
+  const d = listDefer?.[t.id]
+  if (d !== undefined) return d
+  return t.popularityScore ?? 0
+}
+
+export function sortTracksByPopularity(
+  tracks: Track[],
+  listDefer?: Record<string, number> | null,
+): Track[] {
   return [...tracks].sort((a, b) => {
-    const sa = a.popularityScore ?? 0
-    const sb = b.popularityScore ?? 0
+    const sa = listPopularityForSort(a, listDefer)
+    const sb = listPopularityForSort(b, listDefer)
     if (sb !== sa) return sb - sa
     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
   })
 }
 
 /** Higher popularity → tends to appear earlier after shuffle (exponential race / Gumbel trick). */
-export function weightedShuffleByPopularity(tracks: Track[]): Track[] {
+export function weightedShuffleByPopularity(
+  tracks: Track[],
+  listDefer?: Record<string, number> | null,
+): Track[] {
   const scored = tracks.map((t) => {
-    const w = Math.max(0.5, 5 + (t.popularityScore ?? 0))
+    const w = Math.max(0.5, 5 + listPopularityForSort(t, listDefer))
     const key = -Math.log(Math.random()) / w
     return { t, key }
   })

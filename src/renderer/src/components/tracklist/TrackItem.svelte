@@ -4,7 +4,7 @@ import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import { currentTrack, isPlaying, playerActions, playerState } from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
 import { uiActions } from '../../stores/ui.store'
-import { libraryActions, selectedTrackIds } from '../../stores/library.store'
+import { libraryActions, libraryState, selectedTrackIds } from '../../stores/library.store'
 
 const TRACK_DRAG_MIME = 'application/x-stepify-tracks'
 
@@ -87,7 +87,8 @@ $: filterDanceMeta = filterDanceId ? DANCE_CATEGORIES_BY_ID[filterDanceId] : nul
 $: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
 /** Shown on the last-column badge: filtered dance name, assigned dance, or None. */
 $: danceBadgeMeta = filterDanceId ? filterDanceMeta : primaryDance
-$: popScore = track.popularityScore ?? 0
+$: popScore =
+  ($libraryState.deferredListPopularityByTrackId[track.id] ?? track.popularityScore) ?? 0
 
 function onRowClick(e: MouseEvent) {
   const el = e.target as HTMLElement | null
