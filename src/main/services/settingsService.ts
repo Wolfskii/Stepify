@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultVolume: 0.8,
   theme: 'dark',
   spotifyClientId: undefined,
+  spotifyClientSecret: undefined,
 }
 
 // electron-store provides a typed, persistent JSON store backed by the OS
@@ -22,6 +23,7 @@ export const settingsService = {
       defaultVolume: store.get('defaultVolume', 0.8),
       theme: store.get('theme', 'dark'),
       spotifyClientId: store.get('spotifyClientId'),
+      spotifyClientSecret: store.get('spotifyClientSecret'),
       latinDanceOrder: store.get('latinDanceOrder'),
       standardDanceOrder: store.get('standardDanceOrder'),
     }

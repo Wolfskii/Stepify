@@ -195,6 +195,11 @@ export interface AppSettings {
   defaultVolume: number
   theme: 'dark' | 'light'
   spotifyClientId?: string
+  /**
+   * Spotify Client Secret (same app as Client ID). Used only for app-only “Client Credentials”
+   * API access — e.g. merging Spotify into metadata search. Not required for end users to log in.
+   */
+  spotifyClientSecret?: string
   /** Sidebar order within Latin (subset of Latin `DanceId`s, persisted). */
   latinDanceOrder?: DanceId[]
   /** Sidebar order within Standard (subset of Standard `DanceId`s, persisted). */
