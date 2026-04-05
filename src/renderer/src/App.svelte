@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import AppShell from './components/layout/AppShell.svelte'
+import TitleBar from './components/layout/TitleBar.svelte'
 import { libraryActions } from './stores/library.store'
 import { initDanceOrdersFromSettings } from './stores/danceOrder.store'
 import { spotifyService } from './services/spotifyService'
@@ -84,4 +85,25 @@ function handleGlobalKey(e: KeyboardEvent) {
 }
 </script>
 
-<AppShell />
+<div class="app-frame">
+  <TitleBar />
+  <div class="app-frame__body">
+    <AppShell />
+  </div>
+</div>
+
+<style>
+  .app-frame {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-frame__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

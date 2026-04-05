@@ -111,8 +111,7 @@ async function applyAddLibraryScan(data: AddLibraryPathsResult): Promise<void> {
     if (t) playerActions.mergeTrackFromLibrary(t)
   }
   const n = data.newTrackIds.length
-  const touched =
-    n > 0 || removed.length > 0 || (data.changedTrackIds?.length ?? 0) > 0
+  const touched = n > 0 || removed.length > 0 || (data.changedTrackIds?.length ?? 0) > 0
   if (n > 0) {
     uiActions.notify(`Added ${n} new ${n === 1 ? 'track' : 'tracks'}`, 'success')
     const idSet = new Set(data.newTrackIds)
@@ -138,6 +137,23 @@ async function applyAddLibraryScan(data: AddLibraryPathsResult): Promise<void> {
   } else if (!touched) {
     uiActions.notify('Folder is already fully indexed', 'info')
   }
+}
+
+async function handleAddLibraryPathsResponse(data: AddLibraryPathsResult): Promise<void> {
+  if (data.alreadyAddedPaths.length > 0) {
+    uiActions.notify(
+      `Already in library: ${folderBasenamesForMessage(data.alreadyAddedPaths)}`,
+      'warning',
+    )
+  }
+  if (data.invalidPaths.length > 0) {
+    uiActions.notify(
+      `Not a folder (skipped): ${folderBasenamesForMessage(data.invalidPaths)}`,
+      'warning',
+    )
+  }
+  if (data.newlyAddedRootPaths.length === 0) return
+  await applyAddLibraryScan(data)
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -223,7 +239,7 @@ export const libraryActions = {
         }
         return
       }
-      await applyAddLibraryScan(r.data)
+      await handleAddLibraryPathsResponse(r.data)
     } finally {
       libraryActions.setScanning(false)
       libraryActions.setScanProgress(null)
@@ -241,21 +257,7 @@ export const libraryActions = {
         uiActions.notify(r.error ?? 'Could not add folders', 'error')
         return
       }
-      const { alreadyAddedPaths, invalidPaths } = r.data
-      if (alreadyAddedPaths.length > 0) {
-        uiActions.notify(
-          `Already in library: ${folderBasenamesForMessage(alreadyAddedPaths)}`,
-          'warning',
-        )
-      }
-      if (invalidPaths.length > 0) {
-        uiActions.notify(
-          `Not a folder (skipped): ${folderBasenamesForMessage(invalidPaths)}`,
-          'warning',
-        )
-      }
-      if (r.data.newlyAddedRootPaths.length === 0) return
-      await applyAddLibraryScan(r.data)
+      await handleAddLibraryPathsResponse(r.data)
     } finally {
       libraryActions.setScanning(false)
       libraryActions.setScanProgress(null)
@@ -336,8 +338,8 @@ export const libraryActions = {
       return
     }
     await libraryActions.refreshLibraryDirectories()
-    const ids = get(libraryState).tracks
-      .filter((t) => t.localPath && trackFileUnderLibraryFolder(t.localPath, path))
+    const ids = get(libraryState)
+      .tracks.filter((t) => t.localPath && trackFileUnderLibraryFolder(t.localPath, path))
       .map((t) => t.id)
     if (ids.length > 0) {
       await libraryActions.assignDanceToTracks(ids, danceId)
@@ -499,17 +501,12 @@ export const libraryActions = {
    * After importing tracks, detect BPM for local files that have none (tags + analysis).
    * Runs in the background; does not block the UI.
    */
-  async fillMissingBpmForTrackIds(
-    trackIds: string[],
-    options: { silentBpmToast?: boolean } = {},
-  ) {
+  async fillMissingBpmForTrackIds(trackIds: string[], options: { silentBpmToast?: boolean } = {}) {
     const s = get(libraryState)
     const toAnalyze = trackIds
       .map((id) => s.tracks.find((t) => t.id === id))
       .filter((t): t is Track => !!t)
-      .filter(
-        (t) => t.source === 'local' && t.localPath && !(t.bpm != null && t.bpm > 0),
-      )
+      .filter((t) => t.source === 'local' && t.localPath && !(t.bpm != null && t.bpm > 0))
 
     if (toAnalyze.length === 0) return
 
@@ -622,8 +619,8 @@ export const libraryActions = {
   async afterMetadataWizardComplete(trackIds: string[]) {
     if (trackIds.length === 0) return
     void libraryActions.fillMissingBpmForTrackIds(trackIds)
-    const need = get(libraryState).tracks
-      .filter((t) => trackIds.includes(t.id) && t.dances.length === 0)
+    const need = get(libraryState)
+      .tracks.filter((t) => trackIds.includes(t.id) && t.dances.length === 0)
       .map((t) => t.id)
     if (need.length > 0) {
       uiActions.openModal('assign-folder-dance', { folderTrackIds: need })

@@ -89,4 +89,7 @@ export const IPC_WINDOW = {
   MAXIMIZE: 'window:maximize',
   CLOSE: 'window:close',
   TOGGLE_FULLSCREEN: 'window:toggle-fullscreen',
+  GET_MAXIMIZED: 'window:get-maximized',
+  /** Main → renderer when maximize / unmaximize / fullscreen changes */
+  MAXIMIZED_CHANGED: 'window:maximized-changed',
 } as const

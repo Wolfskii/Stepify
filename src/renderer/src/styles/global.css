@@ -58,7 +58,8 @@
   --sidebar-width: 220px;
   --player-sidebar-width: 300px;
   --now-playing-height: 96px;
-  --topbar-height: 0px; /* no top bar — custom window controls via OS */
+  --titlebar-height: 32px;
+  --topbar-height: var(--titlebar-height);
   /* Floating panels (Spotify-style cards) */
   --radius-panel: 8px;
   --shell-gap: 8px;

@@ -46,10 +46,7 @@ const api = {
     getDirectories: (): Promise<IpcResponse<LibraryDirectory[]>> =>
       ipcRenderer.invoke(IPC_LIBRARY.GET_DIRECTORIES),
 
-    setFolderDefaultDance: (
-      dirPath: string,
-      danceId: DanceId | null,
-    ): Promise<IpcResponse<void>> =>
+    setFolderDefaultDance: (dirPath: string, danceId: DanceId | null): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.SET_FOLDER_DEFAULT_DANCE, dirPath, danceId),
 
     getTracks: (danceId?: DanceId): Promise<IpcResponse<Track[]>> =>
@@ -79,9 +76,7 @@ const api = {
     searchTrackMetadata: (query: string): Promise<IpcResponse<MetadataSearchHit[]>> =>
       ipcRenderer.invoke(IPC_LIBRARY.SEARCH_TRACK_METADATA, query),
 
-    updateTrackMetadata: (
-      payload: UpdateTrackMetadataPayload,
-    ): Promise<IpcResponse<Track>> =>
+    updateTrackMetadata: (payload: UpdateTrackMetadataPayload): Promise<IpcResponse<Track>> =>
       ipcRenderer.invoke(IPC_LIBRARY.UPDATE_TRACK_METADATA, payload),
 
     onScanComplete: (callback: (payload: LibraryDiskSyncPayload) => void) => {
@@ -141,6 +136,16 @@ const api = {
     maximize: () => ipcRenderer.send(IPC_WINDOW.MAXIMIZE),
     close: () => ipcRenderer.send(IPC_WINDOW.CLOSE),
     toggleFullscreen: () => ipcRenderer.send(IPC_WINDOW.TOGGLE_FULLSCREEN),
+    getMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_WINDOW.GET_MAXIMIZED),
+    onMaximizedChange: (callback: (isMaximized: boolean) => void): (() => void) => {
+      const handler = (_event: unknown, value: boolean): void => {
+        callback(value)
+      }
+      ipcRenderer.on(IPC_WINDOW.MAXIMIZED_CHANGED, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_WINDOW.MAXIMIZED_CHANGED, handler)
+      }
+    },
   },
 }
 

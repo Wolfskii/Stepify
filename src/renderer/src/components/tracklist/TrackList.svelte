@@ -197,7 +197,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     outline: 2px dashed var(--color-accent);
     outline-offset: -6px;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    background: var(--color-accent-muted);
   }
 
   .track-list__header {
