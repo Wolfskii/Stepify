@@ -72,8 +72,10 @@ export interface PlaybackState {
   currentTime: number
   /** Playback rate: 1.0 = normal speed, 0.9 = -10%, 1.1 = +10% */
   tempo: number
-  /** Volume 0.0 – 1.0 */
+  /** Volume 0.0 – 1.0 (slider level; output is 0 when muted) */
   volume: number
+  /** When true, gain is forced to 0; volume stores the pre-mute level for the slider */
+  muted: boolean
   /** Queue of upcoming tracks */
   queue: Track[]
   /** Index of current track in queue */

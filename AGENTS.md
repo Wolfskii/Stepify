@@ -155,6 +155,10 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 
 - Prefer documenting and using root `Taskfile.yml` (go-task) commands such as `task dev` and `task build`; npm scripts in `package.json` remain the underlying implementation.
 - Library organization UX: bulk-assign local tracks to dances via multi-select (click, Ctrl/Cmd+toggle, Shift+range) and dragging onto sidebar dance categories, in addition to single-track assign flows; optional bulk dance when adding a folder; remove folders (and their tracks) or single local tracks from the library without deleting files on disk.
+- Library playback UX: treat the visible track list as tied to where the queue was started—show the current track as “playing” only when the active filter matches that source (e.g. Samba vs All Tracks), not in every view that happens to list the same file.
+- Track list: for the playing row, only the title uses the accent color; the artist line stays normal secondary text.
+- Sidebar library: do not show per-dance track counts; indicate which dance (or All Tracks) owns the active queue with a playback-source marker (e.g. speaker), similar to Spotify.
+- Every sidebar click on a dance or All Tracks clears multi-selection, even when the filter does not change.
 
 ## Learned Workspace Facts
 
@@ -167,3 +171,5 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 - TypeScript in Svelte (`<script lang="ts">`) requires `svelte-preprocess` wired in the Vite Svelte plugin; overly strict `noUnusedLocals` during Svelte preprocessing can strip imports used only in templates—this repo configures the preprocessor to avoid that class of failure.
 - Player BPM readout uses `referenceBpmInfo` / `adjustedBpm` derived from **both** `playerState.track` and `libraryState.tracks` (by id) so values set or detected after load still show without stale queue copies.
 - Seek bar labels use **listener (wall-clock) time** at the current tempo (`currentTime/tempo`, `sourceDuration/tempo`); `PlaybackState.sourceDuration` is set from the track and refreshed when the decoded buffer loads.
+- `PlayerState.playbackListDanceId` (`DanceId | null`, `null` = All Tracks) records which sidebar list context started the current queue; `TrackItem` and sidebar components compare it to the active filter so “now playing” and queue actions stay scoped to that context.
+- `NowPlayingBar` seek control uses a layered track gradient (played portion, optional hover preview segment toward the pointer, dim remainder); the range thumb is shown on shell hover, while scrubbing, or when the control has keyboard focus (`:focus-visible`).

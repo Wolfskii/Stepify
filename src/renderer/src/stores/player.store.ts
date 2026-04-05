@@ -12,6 +12,7 @@ const initialState: PlaybackState = {
   currentTime: 0,
   tempo: 1.0,
   volume: 0.8,
+  muted: false,
   queue: [],
   queueIndex: -1,
   sourceDuration: 0,
@@ -117,7 +118,15 @@ export const playerActions = {
 
   setVolume(volume: number) {
     const clamped = Math.max(0, Math.min(1, volume))
-    playerState.update((s) => ({ ...s, volume: clamped }))
+    playerState.update((s) => ({
+      ...s,
+      volume: clamped,
+      muted: clamped > 0 ? false : s.muted,
+    }))
+  },
+
+  toggleMute() {
+    playerState.update((s) => ({ ...s, muted: !s.muted }))
   },
 
   setQueue(tracks: Track[], startIndex = 0, listDanceId: DanceId | null = null) {
@@ -276,6 +285,7 @@ export const playerActions = {
           currentTime: 0,
           sourceDuration: 0,
           playbackListDanceId: null,
+          muted: false,
         }
       }
       const newQueue = s.queue.filter((t) => !remove.has(t.id))
