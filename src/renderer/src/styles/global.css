@@ -58,7 +58,7 @@
   --sidebar-width: 220px;
   --player-sidebar-width: 300px;
   --now-playing-height: 96px;
-  --titlebar-height: 32px;
+  --titlebar-height: 64px;
   --topbar-height: var(--titlebar-height);
   /* Floating panels (Spotify-style cards) */
   --radius-panel: 8px;

@@ -49,8 +49,8 @@ import TrackMetadataModal from '../modals/TrackMetadataModal.svelte'
     display: grid;
     grid-template-columns: var(--sidebar-width) 1fr var(--player-sidebar-width);
     gap: var(--shell-gap);
-    padding: var(--shell-pad);
-    padding-bottom: var(--space-2);
+    /* No top padding — avoids a black strip between the custom title bar and the panels. */
+    padding: 0 var(--shell-pad) var(--space-2);
   }
 
   .sidebar-col {

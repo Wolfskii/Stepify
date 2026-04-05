@@ -32,8 +32,8 @@ function onDoubleClickDrag(e: MouseEvent) {
       aria-label="Minimize"
       on:click={() => window.electronAPI.window.minimize()}
     >
-      <svg width="10" height="1" viewBox="0 0 10 1" aria-hidden="true">
-        <rect width="10" height="1" fill="currentColor" />
+      <svg width="12" height="12" viewBox="0 0 10 10" aria-hidden="true">
+        <rect x="0" y="4.5" width="10" height="1" fill="currentColor" />
       </svg>
     </button>
     <button
@@ -43,7 +43,7 @@ function onDoubleClickDrag(e: MouseEvent) {
       on:click={() => window.electronAPI.window.maximize()}
     >
       {#if isMaximized}
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <path
             d="M2.5 2.5v5h5v-5h-5zM4 1h5v5"
             stroke="currentColor"
@@ -51,7 +51,7 @@ function onDoubleClickDrag(e: MouseEvent) {
           />
         </svg>
       {:else}
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 10 10" fill="none" aria-hidden="true">
           <rect x="1" y="1" width="8" height="8" stroke="currentColor" stroke-width="1.1" />
         </svg>
       {/if}
@@ -62,7 +62,7 @@ function onDoubleClickDrag(e: MouseEvent) {
       aria-label="Close"
       on:click={() => window.electronAPI.window.close()}
     >
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" aria-hidden="true">
         <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.1" />
       </svg>
     </button>
@@ -76,7 +76,6 @@ function onDoubleClickDrag(e: MouseEvent) {
     align-items: stretch;
     height: var(--titlebar-height);
     background: #000000;
-    border-bottom: 1px solid #1a1a1a;
     user-select: none;
   }
 
@@ -84,35 +83,54 @@ function onDoubleClickDrag(e: MouseEvent) {
     flex: 1;
     display: flex;
     align-items: center;
-    padding-left: var(--space-4);
+    align-self: stretch;
+    min-height: var(--titlebar-height);
+    padding-left: var(--space-5);
     min-width: 0;
     -webkit-app-region: drag;
     app-region: drag;
   }
 
   .title-bar__brand {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.35);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.45);
     pointer-events: none;
   }
 
   .title-bar__controls {
     display: flex;
     flex-shrink: 0;
+    align-items: stretch;
+    align-self: stretch;
+    height: 100%;
+    min-height: var(--titlebar-height);
     -webkit-app-region: no-drag;
     app-region: no-drag;
   }
 
+  /* Override global `button { display: inline-flex }` so % height fills the title bar (hover fills edge-to-edge). */
   .title-bar__btn {
-    width: 46px;
-    height: 100%;
-    min-height: var(--titlebar-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 56px;
+    width: 56px;
+    align-self: stretch;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    gap: 0;
     color: rgba(255, 255, 255, 0.85);
     border-radius: 0;
     transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast)
       var(--ease-out);
+  }
+
+  .title-bar__btn:focus-visible {
+    outline-offset: -2px;
+    border-radius: 0;
   }
 
   .title-bar__btn:hover {
