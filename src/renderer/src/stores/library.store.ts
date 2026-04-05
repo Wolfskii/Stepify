@@ -9,15 +9,14 @@ import type {
 import { derived, get, writable } from 'svelte/store'
 import { resolveBpmForLocalTrack } from '../services/bpmAnalysis'
 import { trackNeedsMetadataEnrichment } from '../utils/metadataQuery'
+import {
+  filterTracksForListView,
+  pathsEqualLibrary,
+  sortTracksByPopularity,
+  trackFileUnderLibraryFolder,
+  weightedShuffleByPopularity,
+} from '../utils/trackListFilter'
 import { uiActions } from './ui.store'
-
-/** Whether a local file path lies under a library root (normalized slash comparison). */
-function trackFileUnderLibraryFolder(filePath: string, dirPath: string): boolean {
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
-  const f = norm(filePath)
-  const d = norm(dirPath)
-  return f === d || f.startsWith(`${d}/`)
-}
 
 interface LibraryState {
   tracks: Track[]
@@ -32,6 +31,16 @@ interface LibraryState {
   selectedTrackIds: string[]
   /** Anchor index in the current visible list for shift-range selection */
   selectionAnchorIndex: number | null
+  /**
+   * When shuffle is on, list order follows this id sequence (same filters as when shuffle was toggled).
+   */
+  shuffleQueueOrderIds: string[] | null
+  /** Filters that must match the sidebar for `shuffleQueueOrderIds` to apply to the list. */
+  shuffleDisplayContext: {
+    danceId: DanceId | null
+    folderPath: string | null
+    searchQuery: string
+  } | null
 }
 
 const initialState: LibraryState = {
@@ -44,6 +53,8 @@ const initialState: LibraryState = {
   searchQuery: '',
   selectedTrackIds: [],
   selectionAnchorIndex: null,
+  shuffleQueueOrderIds: null,
+  shuffleDisplayContext: null,
 }
 
 export const libraryState = writable<LibraryState>(initialState)
@@ -52,31 +63,33 @@ export const libraryState = writable<LibraryState>(initialState)
 
 export const allTracks = derived(libraryState, ($s) => $s.tracks)
 
+function shuffleDisplayApplies(s: LibraryState): boolean {
+  const ctx = s.shuffleDisplayContext
+  if (!ctx || !s.shuffleQueueOrderIds?.length) return false
+  if (!pathsEqualLibrary(s.selectedFolderPath, ctx.folderPath)) return false
+  if (s.selectedDanceId !== ctx.danceId) return false
+  return s.searchQuery === ctx.searchQuery
+}
+
 export const filteredTracks = derived(libraryState, ($s) => {
-  let tracks = $s.tracks
+  let tracks = filterTracksForListView($s.tracks, {
+    folderPath: $s.selectedFolderPath,
+    danceId: $s.selectedDanceId,
+    searchQuery: $s.searchQuery,
+  })
 
-  const folderPath = $s.selectedFolderPath
-  if (folderPath) {
-    tracks = tracks.filter(
-      (t) =>
-        t.source === 'local' &&
-        Boolean(t.localPath && trackFileUnderLibraryFolder(t.localPath, folderPath)),
-    )
-  }
-
-  const danceId = $s.selectedDanceId
-  if (danceId) {
-    tracks = tracks.filter((t) => t.dances.includes(danceId))
-  }
-
-  if ($s.searchQuery.trim()) {
-    const q = $s.searchQuery.toLowerCase()
-    tracks = tracks.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.artist.toLowerCase().includes(q) ||
-        t.album?.toLowerCase().includes(q),
-    )
+  if (shuffleDisplayApplies($s)) {
+    const order = $s.shuffleQueueOrderIds!
+    const map = new Map(order.map((id, i) => [id, i]))
+    tracks = [...tracks].sort((a, b) => {
+      const ia = map.get(a.id)
+      const ib = map.get(b.id)
+      const na = ia === undefined ? 1_000_000 : ia
+      const nb = ib === undefined ? 1_000_000 : ib
+      return na - nb
+    })
+  } else {
+    tracks = sortTracksByPopularity(tracks)
   }
 
   return tracks
@@ -99,6 +112,16 @@ export const trackCountsByDance = derived(libraryState, ($s) => {
 export const selectedTrackIds = derived(libraryState, ($s) => $s.selectedTrackIds)
 
 export const libraryDirectories = derived(libraryState, ($s) => $s.libraryDirectories)
+
+async function clearShuffleListOrdering(): Promise<void> {
+  libraryState.update((s) => ({
+    ...s,
+    shuffleQueueOrderIds: null,
+    shuffleDisplayContext: null,
+  }))
+  const { playerActions } = await import('./player.store')
+  playerActions.setShuffle(false)
+}
 
 function folderBasenamesForMessage(paths: string[], maxShow = 3): string {
   const names = paths.map((p) => {
@@ -292,6 +315,9 @@ export const libraryActions = {
   },
 
   selectDance(danceId: DanceId | null) {
+    const prev = get(libraryState)
+    const sameDanceReselect = danceId !== null && prev.selectedDanceId === danceId
+
     libraryState.update((s) => {
       if (danceId !== null && s.selectedDanceId === danceId) {
         return {
@@ -308,6 +334,10 @@ export const libraryActions = {
         selectionAnchorIndex: null,
       }
     })
+
+    if (!sameDanceReselect) {
+      void clearShuffleListOrdering()
+    }
   },
 
   /** Browse tracks under one library root (same as All Tracks columns, including Dance). */
@@ -334,6 +364,7 @@ export const libraryActions = {
         selectionAnchorIndex: null,
       }
     })
+    void clearShuffleListOrdering()
   },
 
   clearTrackSelection() {
@@ -513,7 +544,13 @@ export const libraryActions = {
   },
 
   setSearchQuery(query: string) {
+    const prev = get(libraryState)
+    const hadShuffleOrder =
+      prev.shuffleQueueOrderIds != null || prev.shuffleDisplayContext != null
     libraryState.update((s) => ({ ...s, searchQuery: query }))
+    if (hadShuffleOrder) {
+      void clearShuffleListOrdering()
+    }
   },
 
   updateTrackDance(trackId: string, danceId: DanceId, assigned: boolean) {
@@ -529,11 +566,93 @@ export const libraryActions = {
     }))
   },
 
-  patchTrack(trackId: string, patch: Partial<Pick<Track, 'bpm' | 'duration'>>) {
+  patchTrack(trackId: string, patch: Partial<Pick<Track, 'bpm' | 'duration' | 'popularityScore'>>) {
     libraryState.update((s) => ({
       ...s,
       tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t)),
     }))
+  },
+
+  /** Rebuild queue + list order from shuffle / popularity (Now Playing bar). */
+  async toggleShufflePlayback() {
+    const { playerActions, playerState } = await import('./player.store')
+    const p = get(playerState)
+    const l = get(libraryState)
+
+    const visible = filterTracksForListView(l.tracks, {
+      folderPath: p.playbackListFolderPath,
+      danceId: p.playbackListFolderPath ? null : p.playbackListDanceId,
+      searchQuery: l.searchQuery,
+    })
+
+    const byId = new Map(l.tracks.map((t) => [t.id, t]))
+    const merged = visible.map((t) => byId.get(t.id) ?? t)
+
+    if (merged.length === 0) {
+      uiActions.notify('Nothing to play in this list', 'info')
+      return
+    }
+
+    const listDanceId = p.playbackListFolderPath ? null : p.playbackListDanceId
+    const listFolderPath = p.playbackListFolderPath
+
+    if (p.shuffle) {
+      const sorted = sortTracksByPopularity(merged)
+      const cur = p.track
+      const idx = cur ? sorted.findIndex((t) => t.id === cur.id) : 0
+      const start = idx >= 0 ? idx : 0
+      libraryState.update((s) => ({
+        ...s,
+        shuffleQueueOrderIds: null,
+        shuffleDisplayContext: null,
+      }))
+      playerActions.setShuffle(false)
+      playerActions.setQueue(sorted, start, listDanceId, listFolderPath)
+      return
+    }
+
+    const cur = p.track
+    let queue: Track[]
+    if (cur && merged.some((t) => t.id === cur.id)) {
+      const rest = merged.filter((t) => t.id !== cur.id)
+      const enrichedCur = byId.get(cur.id) ?? cur
+      queue = [enrichedCur, ...weightedShuffleByPopularity(rest)]
+    } else {
+      queue = weightedShuffleByPopularity([...merged])
+    }
+
+    const curIdx = cur ? queue.findIndex((t) => t.id === cur.id) : 0
+    const start = curIdx >= 0 ? curIdx : 0
+
+    const shuffleDisplayContext = {
+      danceId: listDanceId,
+      folderPath: listFolderPath,
+      searchQuery: l.searchQuery,
+    }
+
+    libraryState.update((s) => ({
+      ...s,
+      shuffleQueueOrderIds: queue.map((t) => t.id),
+      shuffleDisplayContext,
+    }))
+    playerActions.setShuffle(true)
+    playerActions.setQueue(queue, start, listDanceId, listFolderPath)
+  },
+
+  async voteTrackPopularity(trackId: string, delta: 1 | -1): Promise<boolean> {
+    const r = await window.electronAPI.library.adjustTrackPopularity(trackId, delta)
+    if (!r.success || !r.data) {
+      uiActions.notify(r.error ?? 'Could not save like/dislike', 'warning')
+      return false
+    }
+    const t = r.data
+    libraryState.update((s) => ({
+      ...s,
+      tracks: s.tracks.map((x) => (x.id === t.id ? t : x)),
+    }))
+    const { playerActions } = await import('./player.store')
+    playerActions.mergeTrackFromLibrary(t)
+    return true
   },
 
   clearTrackBpmInState(trackId: string) {

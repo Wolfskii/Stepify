@@ -152,6 +152,10 @@ export const playerActions = {
     playerState.update((s) => ({ ...s, shuffle: !s.shuffle }))
   },
 
+  setShuffle(on: boolean) {
+    playerState.update((s) => (s.shuffle === on ? s : { ...s, shuffle: on }))
+  },
+
   cycleRepeat() {
     const order: RepeatMode[] = ['off', 'all', 'one']
     playerState.update((s) => {
@@ -169,18 +173,10 @@ export const playerActions = {
     const q = s.queue
     if (q.length === 0) return false
 
-    let nextIndex: number
-    if (s.shuffle && q.length > 1) {
-      const candidates = q.map((_, i) => i).filter((i) => i !== s.queueIndex)
-      const pick = candidates[Math.floor(Math.random() * candidates.length)]
-      if (pick === undefined) return false
-      nextIndex = pick
-    } else {
-      nextIndex = s.queueIndex + 1
-      if (nextIndex >= q.length) {
-        if (s.repeatMode === 'all') nextIndex = 0
-        else return false
-      }
+    let nextIndex = s.queueIndex + 1
+    if (nextIndex >= q.length) {
+      if (s.repeatMode === 'all') nextIndex = 0
+      else return false
     }
 
     const t = q[nextIndex]
@@ -238,13 +234,7 @@ export const playerActions = {
       return 'play'
     }
 
-    let nextIndex: number
-    if (state.shuffle && q.length > 1) {
-      const candidates = q.map((_, i) => i).filter((i) => i !== state.queueIndex)
-      nextIndex = candidates[Math.floor(Math.random() * candidates.length)] ?? state.queueIndex + 1
-    } else {
-      nextIndex = state.queueIndex + 1
-    }
+    let nextIndex = state.queueIndex + 1
 
     if (nextIndex >= q.length) {
       if (state.repeatMode === 'all' && q.length > 0) {

@@ -48,6 +48,8 @@ export const IPC_LIBRARY = {
   UPDATE_TRACK_METADATA: 'library:update-track-metadata',
   /** Open a registered library root in the system file manager (Explorer / Finder / etc.) */
   OPEN_LIBRARY_FOLDER: 'library:open-library-folder',
+  /** Like (+1) or dislike (-1); main enforces a per-track cooldown between votes */
+  ADJUST_TRACK_POPULARITY: 'library:adjust-track-popularity',
 } as const
 
 // ─── Audio Channels ───────────────────────────────────────────────────────────

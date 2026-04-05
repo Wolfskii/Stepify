@@ -251,6 +251,17 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
   )
 
   ipcMain.handle(
+    IPC_LIBRARY.ADJUST_TRACK_POPULARITY,
+    async (_event, trackId: string, delta: 1 | -1): Promise<IpcResponse<Track>> => {
+      const r = libraryService.adjustTrackPopularity(trackId, delta)
+      if (!r.ok) {
+        return { success: false, error: r.error }
+      }
+      return { success: true, data: r.track }
+    },
+  )
+
+  ipcMain.handle(
     IPC_LIBRARY.SEARCH_TRACK_METADATA,
     async (_event, query: string): Promise<IpcResponse<MetadataSearchHit[]>> => {
       try {

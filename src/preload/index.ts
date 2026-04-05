@@ -73,6 +73,12 @@ const api = {
     clearTrackBpm: (trackId: string): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.CLEAR_TRACK_BPM, trackId),
 
+    adjustTrackPopularity: (
+      trackId: string,
+      delta: 1 | -1,
+    ): Promise<IpcResponse<Track>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.ADJUST_TRACK_POPULARITY, trackId, delta),
+
     searchTrackMetadata: (query: string): Promise<IpcResponse<MetadataSearchHit[]>> =>
       ipcRenderer.invoke(IPC_LIBRARY.SEARCH_TRACK_METADATA, query),
 

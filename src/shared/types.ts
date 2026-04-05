@@ -61,6 +61,10 @@ export interface Track {
   missingEmbeddedArt?: boolean
   /** Last known source file mtime (ms); used to skip re-parsing unchanged files on rescan. */
   fileMtimeMs?: number
+  /**
+   * Like/dislike popularity (likes add, dislikes subtract). Used for default list order and shuffle weighting.
+   */
+  popularityScore?: number
 }
 
 /** One row from online metadata search (e.g. iTunes). */
@@ -131,7 +135,7 @@ export interface PlaybackState {
   queueIndex: number
   /** Source file duration in seconds (from metadata / decoded buffer) */
   sourceDuration: number
-  /** Random next track when advancing */
+  /** When true, follow `queue` order; order is built once when shuffle is turned on (weighted by popularity). */
   shuffle: boolean
   /** Loop: off, whole queue, or current track (track applies at end of song) */
   repeatMode: RepeatMode

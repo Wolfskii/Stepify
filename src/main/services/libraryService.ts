@@ -74,9 +74,17 @@ function trackLibraryFieldsChanged(before: Track, after: Track): boolean {
     before.localPath !== after.localPath ||
     before.missingEmbeddedTitle !== after.missingEmbeddedTitle ||
     before.missingEmbeddedArtist !== after.missingEmbeddedArtist ||
-    before.missingEmbeddedArt !== after.missingEmbeddedArt
+    before.missingEmbeddedArt !== after.missingEmbeddedArt ||
+    before.popularityScore !== after.popularityScore
   )
 }
+
+/** Per track: at most one like/dislike every 10 minutes (anti-spam / score gaming). */
+const POPULARITY_COOLDOWN_PER_TRACK_MS = 10 * 60 * 1000
+const lastPopularityAdjustByTrackId = new Map<string, number>()
+
+const POPULARITY_MIN = -10_000
+const POPULARITY_MAX = 10_000
 
 /** Max embedded cover size to store as data URL in library JSON (bytes). */
 const MAX_ARTWORK_BYTES = 200 * 1024
@@ -159,6 +167,36 @@ export const libraryService = {
     tracks[trackId] = next
     libraryStore.set('tracks', tracks)
     return true
+  },
+
+  /**
+   * Like (+1) or dislike (-1) with a per-track cooldown to limit spam on one song.
+   * Returns updated track or an error message.
+   */
+  adjustTrackPopularity(
+    trackId: string,
+    delta: 1 | -1,
+  ): { ok: true; track: Track } | { ok: false; error: string } {
+    const now = Date.now()
+    const lastAt = lastPopularityAdjustByTrackId.get(trackId)
+    if (lastAt != null && now - lastAt < POPULARITY_COOLDOWN_PER_TRACK_MS) {
+      const remainingMs = POPULARITY_COOLDOWN_PER_TRACK_MS - (now - lastAt)
+      const remainingMin = Math.max(1, Math.ceil(remainingMs / 60_000))
+      return {
+        ok: false,
+        error: `You can vote on this track again in about ${remainingMin} minute${remainingMin === 1 ? '' : 's'}.`,
+      }
+    }
+    const tracks = libraryStore.get('tracks', {})
+    const track = tracks[trackId]
+    if (!track) return { ok: false, error: 'Track not found' }
+    lastPopularityAdjustByTrackId.set(trackId, now)
+    const prev = track.popularityScore ?? 0
+    const nextScore = Math.max(POPULARITY_MIN, Math.min(POPULARITY_MAX, prev + delta))
+    const updated: Track = { ...track, popularityScore: nextScore }
+    tracks[trackId] = updated
+    libraryStore.set('tracks', tracks)
+    return { ok: true, track: updated }
   },
 
   removeTrack(trackId: string): boolean {
@@ -331,6 +369,7 @@ export const libraryService = {
       tags: existing.tags ?? fresh.tags,
       bpm,
       localPath: canonicalPath ?? fresh.localPath,
+      popularityScore: existing.popularityScore,
     }
   },
 

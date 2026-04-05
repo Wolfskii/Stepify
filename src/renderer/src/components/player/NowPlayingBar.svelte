@@ -12,6 +12,7 @@ import {
 } from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
 import { uiActions } from '../../stores/ui.store'
+import { libraryActions, libraryState } from '../../stores/library.store'
 import { onMount, onDestroy } from 'svelte'
 import type { RepeatMode } from '@shared/types'
 
@@ -28,9 +29,37 @@ $: canPrev =
 
 $: canNext =
   $queue.length > 0 &&
-  ($playerState.queueIndex < $queue.length - 1 ||
-    $playerState.repeatMode === 'all' ||
-    ($playerState.shuffle && $queue.length > 1))
+  ($playerState.queueIndex < $queue.length - 1 || $playerState.repeatMode === 'all')
+
+$: currentInLibrary =
+  $currentTrack != null && $libraryState.tracks.some((t) => t.id === $currentTrack.id)
+
+/** Mirrors main-process cooldown so we skip pointless IPC; main is authoritative. */
+const TRACK_VOTE_COOLDOWN_MS = 10 * 60 * 1000
+const lastVoteAtByTrackId = new Map<string, number>()
+/** Bumps on an interval so vote buttons re-enable after the cooldown without user interaction. */
+let voteCooldownTick = 0
+let voteCooldownInterval: ReturnType<typeof setInterval> | undefined
+
+function isVoteLockedForTrack(trackId: string | undefined): boolean {
+  if (!trackId) return false
+  const at = lastVoteAtByTrackId.get(trackId)
+  if (at == null) return false
+  return Date.now() - at < TRACK_VOTE_COOLDOWN_MS
+}
+
+$: voteCooldownTick
+$: voteLockedForCurrent = isVoteLockedForTrack($currentTrack?.id)
+
+async function votePopularity(delta: 1 | -1) {
+  const t = get(currentTrack)
+  if (!t || isVoteLockedForTrack(t.id) || !get(libraryState).tracks.some((x) => x.id === t.id)) return
+  const ok = await libraryActions.voteTrackPopularity(t.id, delta)
+  if (ok) {
+    lastVoteAtByTrackId.set(t.id, Date.now())
+    voteCooldownTick++
+  }
+}
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60)
@@ -297,6 +326,9 @@ let unsubEnded: () => void
 let unsubLoaded: () => void
 
 onMount(() => {
+  voteCooldownInterval = setInterval(() => {
+    voteCooldownTick++
+  }, 30_000)
   window.addEventListener('pointerup', onWindowPointerUp)
   unsubTimeUpdate = audioEngine.on<number>('timeupdate', (time) => {
     playerActions.setCurrentTime(time)
@@ -315,6 +347,7 @@ onMount(() => {
 })
 
 onDestroy(() => {
+  if (voteCooldownInterval != null) clearInterval(voteCooldownInterval)
   window.removeEventListener('pointerup', onWindowPointerUp)
   unsubTimeUpdate?.()
   unsubEnded?.()
@@ -368,74 +401,106 @@ onDestroy(() => {
       <div class="now-playing-bar__transport">
         <button
           type="button"
-          class="np-btn np-btn--icon"
-          class:active={$playerState.shuffle}
-          on:click={() => playerActions.toggleShuffle()}
-          title="Shuffle"
-          aria-label="Shuffle"
-          aria-pressed={$playerState.shuffle}
+          class="np-btn np-btn--icon np-btn--compact"
+          disabled={!$currentTrack || !currentInLibrary || voteLockedForCurrent}
+          on:click={() => votePopularity(-1)}
+          title="Dislike (once per 10 minutes per track)"
+          aria-label="Dislike track"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
-              d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"
+              d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"
             />
           </svg>
         </button>
 
-        <button
-          type="button"
-          class="np-btn np-btn--icon"
-          on:click={previous}
-          disabled={!canPrev}
-          aria-label="Previous track"
-        >
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 6h2v12H6zM16 6L9 12l7 6V6z" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="np-btn np-btn--play"
-          on:click={togglePlay}
-          disabled={!$currentTrack}
-          aria-label={$isPlaying ? 'Pause' : 'Play'}
-        >
-          {#if $isPlaying}
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+        <div class="np-transport__core">
+          <button
+            type="button"
+            class="np-btn np-btn--icon"
+            class:active={$playerState.shuffle}
+            on:click={() => void libraryActions.toggleShufflePlayback()}
+            title="Shuffle (weighted by likes; list order matches queue)"
+            aria-label="Shuffle"
+            aria-pressed={$playerState.shuffle}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"
+              />
             </svg>
-          {:else}
+          </button>
+
+          <button
+            type="button"
+            class="np-btn np-btn--icon"
+            on:click={previous}
+            disabled={!canPrev}
+            aria-label="Previous track"
+          >
             <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
+              <path d="M6 6h2v12H6zM16 6L9 12l7 6V6z" />
             </svg>
-          {/if}
-        </button>
+          </button>
+
+          <button
+            type="button"
+            class="np-btn np-btn--play"
+            on:click={togglePlay}
+            disabled={!$currentTrack}
+            aria-label={$isPlaying ? 'Pause' : 'Play'}
+          >
+            {#if $isPlaying}
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              </svg>
+            {:else}
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            {/if}
+          </button>
+
+          <button
+            type="button"
+            class="np-btn np-btn--icon"
+            on:click={next}
+            disabled={!canNext}
+            aria-label="Next track"
+          >
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            class="np-btn np-btn--icon"
+            class:active={$playerState.repeatMode !== 'off'}
+            class:repeat-one={$playerState.repeatMode === 'one'}
+            on:click={() => playerActions.cycleRepeat()}
+            title={repeatAria($playerState.repeatMode)}
+            aria-label={repeatAria($playerState.repeatMode)}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path
+                d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"
+              />
+            </svg>
+          </button>
+        </div>
 
         <button
           type="button"
-          class="np-btn np-btn--icon"
-          on:click={next}
-          disabled={!canNext}
-          aria-label="Next track"
+          class="np-btn np-btn--icon np-btn--compact"
+          disabled={!$currentTrack || !currentInLibrary || voteLockedForCurrent}
+          on:click={() => votePopularity(1)}
+          title="Like (once per 10 minutes per track)"
+          aria-label="Like track"
         >
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="np-btn np-btn--icon"
-          class:active={$playerState.repeatMode !== 'off'}
-          class:repeat-one={$playerState.repeatMode === 'one'}
-          on:click={() => playerActions.cycleRepeat()}
-          title={repeatAria($playerState.repeatMode)}
-          aria-label={repeatAria($playerState.repeatMode)}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
-              d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"
+              d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
             />
           </svg>
         </button>
@@ -730,6 +795,13 @@ onDestroy(() => {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: var(--space-5);
+  }
+
+  .np-transport__core {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: var(--space-2);
   }
 
@@ -767,6 +839,17 @@ onDestroy(() => {
 
   .np-btn--icon.repeat-one {
     color: var(--color-accent);
+  }
+
+  .np-btn--compact {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    color: #8a8a8a;
+  }
+
+  .np-btn--compact:hover:not(:disabled) {
+    color: #ffffff;
   }
 
   .np-btn--play {
