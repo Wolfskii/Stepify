@@ -215,16 +215,17 @@ function mergeCatalogHitsBalanced(
     const onlyAppleLeft = ib >= spotifyQ.length
     const onlySpotifyLeft = ia >= appleQ.length
 
+    // Apple exhausted → take Spotify; Spotify exhausted → take Apple (names refer to what’s *left*).
     if (onlySpotifyLeft) {
-      out.push(appleQ[ia].h)
-      ia++
-      nApple++
-      continue
-    }
-    if (onlyAppleLeft) {
       out.push(spotifyQ[ib].h)
       ib++
       nSpotify++
+      continue
+    }
+    if (onlyAppleLeft) {
+      out.push(appleQ[ia].h)
+      ia++
+      nApple++
       continue
     }
 
