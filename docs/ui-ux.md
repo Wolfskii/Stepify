@@ -120,6 +120,7 @@ The tempo slider is the most important UI element. It must feel premium.
 ### Track list interactions
 
 - **Assign dance** — Per-row **+**, drag onto sidebar dance, or multi-select (click / Ctrl / Shift) and drag the selection.
+- **Column sort** — Header buttons on **Title**, **Duration**, **BPM**, **Likes**, and **Dance** (when not in a single-dance filter) sort the visible list; a second click reverses direction. Choosing a sort clears an active shuffle display order for that list. Default order remains popularity-based until the user picks a column.
 - **Seek bar times** — Elapsed and total show **listening (wall-clock) time at the current tempo** (slower tempo ⇒ longer displayed duration). The bar still seeks by position in the underlying file.
 
 ---

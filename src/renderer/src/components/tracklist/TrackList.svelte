@@ -9,7 +9,9 @@ import {
   isScanning,
   libraryActions,
   selectedTrackIds,
+  trackListSort,
 } from '../../stores/library.store'
+import type { TrackListSortKey } from '@shared/types'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import TrackItem from './TrackItem.svelte'
 import { activeModal, uiActions } from '../../stores/ui.store'
@@ -99,6 +101,11 @@ function onDrop(e: DragEvent) {
   dragOver = false
   const paths = pathsFromFileDrop(e.dataTransfer)
   if (paths.length) void libraryActions.addMusicFoldersFromDroppedPaths(paths)
+}
+
+function ariaSortAttr(key: TrackListSortKey): 'ascending' | 'descending' | 'none' {
+  if ($trackListSort.key !== key) return 'none'
+  return $trackListSort.direction === 'asc' ? 'ascending' : 'descending'
 }
 
 /** Clicks on chrome/empty space (not on a track row or button) clear multi-select. */
@@ -202,53 +209,227 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     {#if $filteredTracks.length > 0}
       <div class="track-list__cols track-list__cols--sticky" role="row" aria-label="Track list columns">
         <div role="columnheader" class="track-list__col track-list__col--index">#</div>
-        <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
+        <div
+          role="columnheader"
+          class="track-list__col track-list__col--title-block"
+          aria-sort={ariaSortAttr('title')}
+        >
+          <button
+            type="button"
+            class="track-list__col-header"
+            class:track-list__col-header--active={$trackListSort.key === 'title'}
+            aria-label="Sort by title. {$trackListSort.key === 'title'
+              ? $trackListSort.direction === 'asc'
+                ? 'Ascending'
+                : 'Descending'
+              : 'Click to sort'}"
+            on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('title')}
+          >
+            <span>Title</span>
+            {#if $trackListSort.key === 'title'}
+              <svg
+                class="track-list__sort-caret"
+                class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 3.5L5 7l3-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            {/if}
+          </button>
+        </div>
         <div class="track-list__meta-cols" class:track-list__meta-cols--dance-filter={$selectedDanceId}>
           <div
             role="columnheader"
             class="track-list__col track-list__col--time"
-            aria-label="Duration"
+            aria-sort={ariaSortAttr('duration')}
           >
-            <svg
-              class="track-list__time-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
+            <button
+              type="button"
+              class="track-list__col-header track-list__col-header--icon"
+              class:track-list__col-header--active={$trackListSort.key === 'duration'}
+              title="Sort by track length"
+              aria-label="Sort by duration. {$trackListSort.key === 'duration'
+                ? $trackListSort.direction === 'asc'
+                  ? 'Ascending'
+                  : 'Descending'
+                : 'Click to sort'}"
+              on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('duration')}
             >
-              <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.35" />
-              <path
-                d="M8 4.75V8h3.25"
-                stroke="currentColor"
-                stroke-width="1.35"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+              <svg
+                class="track-list__time-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+              >
+                <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.35" />
+                <path
+                  d="M8 4.75V8h3.25"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              {#if $trackListSort.key === 'duration'}
+                <svg
+                  class="track-list__sort-caret track-list__sort-caret--meta"
+                  class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 3.5L5 7l3-3.5"
+                    stroke="currentColor"
+                    stroke-width="1.35"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              {/if}
+            </button>
           </div>
-          <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
+          <div
+            role="columnheader"
+            class="track-list__col track-list__col--bpm"
+            aria-sort={ariaSortAttr('bpm')}
+          >
+            <button
+              type="button"
+              class="track-list__col-header track-list__col-header--bpm"
+              class:track-list__col-header--active={$trackListSort.key === 'bpm'}
+              aria-label="Sort by BPM. {$trackListSort.key === 'bpm'
+                ? $trackListSort.direction === 'asc'
+                  ? 'Ascending'
+                  : 'Descending'
+                : 'Click to sort'}"
+              on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('bpm')}
+            >
+              <span>BPM</span>
+              {#if $trackListSort.key === 'bpm'}
+                <svg
+                  class="track-list__sort-caret"
+                  class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 3.5L5 7l3-3.5"
+                    stroke="currentColor"
+                    stroke-width="1.35"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              {/if}
+            </button>
+          </div>
           <div
             role="columnheader"
             class="track-list__col track-list__col--popularity"
-            title="Likes minus dislikes for this track"
-            aria-label="Popularity: likes minus dislikes"
+            aria-sort={ariaSortAttr('popularity')}
           >
-            <svg
-              class="track-list__popularity-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden="true"
+            <button
+              type="button"
+              class="track-list__col-header track-list__col-header--icon"
+              class:track-list__col-header--active={$trackListSort.key === 'popularity'}
+              title="Sort by likes minus dislikes"
+              aria-label="Sort by popularity. {$trackListSort.key === 'popularity'
+                ? $trackListSort.direction === 'asc'
+                  ? 'Ascending'
+                  : 'Descending'
+                : 'Click to sort'}"
+              on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('popularity')}
             >
-              <path
-                d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
-              />
-            </svg>
+              <svg
+                class="track-list__popularity-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+                />
+              </svg>
+              {#if $trackListSort.key === 'popularity'}
+                <svg
+                  class="track-list__sort-caret track-list__sort-caret--meta"
+                  class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2 3.5L5 7l3-3.5"
+                    stroke="currentColor"
+                    stroke-width="1.35"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              {/if}
+            </button>
           </div>
           {#if !$selectedDanceId}
-            <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
+            <div
+              role="columnheader"
+              class="track-list__col track-list__col--dance"
+              aria-sort={ariaSortAttr('dance')}
+            >
+              <button
+                type="button"
+                class="track-list__col-header track-list__col-header--dance"
+                class:track-list__col-header--active={$trackListSort.key === 'dance'}
+                aria-label="Sort by dance. {$trackListSort.key === 'dance'
+                  ? $trackListSort.direction === 'asc'
+                    ? 'Ascending'
+                    : 'Descending'
+                  : 'Click to sort'}"
+                on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('dance')}
+              >
+                <span>Dance</span>
+                {#if $trackListSort.key === 'dance'}
+                  <svg
+                    class="track-list__sort-caret"
+                    class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
+                    width="10"
+                    height="10"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M2 3.5L5 7l3-3.5"
+                      stroke="currentColor"
+                      stroke-width="1.35"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                {/if}
+              </button>
+            </div>
           {:else}
             <div
               role="columnheader"
@@ -483,8 +664,81 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     margin-inline-end: var(--space-3);
     overflow: hidden;
     text-align: left;
+  }
+
+  .track-list__col-header {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .track-list__col-header:hover {
+    color: var(--color-text-primary);
+  }
+
+  .track-list__col-header--active {
+    color: var(--color-accent);
+  }
+
+  .track-list__col-header:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .track-list__col--title-block .track-list__col-header {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .track-list__col--title-block .track-list__col-header > span:first-child {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+  }
+
+  .track-list__col-header--icon {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .track-list__col-header--bpm {
+    justify-content: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .track-list__col-header--dance {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .track-list__sort-caret {
+    flex-shrink: 0;
+    color: var(--color-accent);
+  }
+
+  .track-list__sort-caret--meta {
+    margin-top: 1px;
+  }
+
+  .track-list__sort-caret--asc {
+    transform: rotate(180deg);
   }
 
   /* Time · BPM · Pop. · dance (or narrow icon slot in dance-filter view) */

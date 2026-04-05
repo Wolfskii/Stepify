@@ -5,14 +5,17 @@ import type {
   LibraryDirectory,
   LibraryDiskSyncPayload,
   Track,
+  TrackListSort,
+  TrackListSortKey,
 } from '@shared/types'
 import { derived, get, writable } from 'svelte/store'
 import { resolveBpmForLocalTrack } from '../services/bpmAnalysis'
 import { trackNeedsMetadataEnrichment } from '../utils/metadataQuery'
 import {
+  DEFAULT_TRACK_LIST_SORT,
   filterTracksForListView,
   pathsEqualLibrary,
-  sortTracksByPopularity,
+  sortTracksForListView,
   trackFileUnderLibraryFolder,
   weightedShuffleByPopularity,
 } from '../utils/trackListFilter'
@@ -46,6 +49,8 @@ interface LibraryState {
    * Used when liking or disliking the **currently playing** track so the list does not resort mid-session (avoids queue/order surprises).
    */
   deferredListPopularityByTrackId: Record<string, number>
+  /** User-chosen column sort (shuffle list order overrides until a sort header is used). */
+  trackListSort: TrackListSort
 }
 
 const initialState: LibraryState = {
@@ -61,6 +66,7 @@ const initialState: LibraryState = {
   shuffleQueueOrderIds: null,
   shuffleDisplayContext: null,
   deferredListPopularityByTrackId: {},
+  trackListSort: { ...DEFAULT_TRACK_LIST_SORT },
 }
 
 export const libraryState = writable<LibraryState>(initialState)
@@ -95,11 +101,13 @@ export const filteredTracks = derived(libraryState, ($s) => {
       return na - nb
     })
   } else {
-    tracks = sortTracksByPopularity(tracks, $s.deferredListPopularityByTrackId)
+    tracks = sortTracksForListView(tracks, $s.trackListSort, $s.deferredListPopularityByTrackId)
   }
 
   return tracks
 })
+
+export const trackListSort = derived(libraryState, ($s) => $s.trackListSort)
 
 export const selectedDanceId = derived(libraryState, ($s) => $s.selectedDanceId)
 export const selectedFolderPath = derived(libraryState, ($s) => $s.selectedFolderPath)
@@ -200,7 +208,34 @@ async function handleAddLibraryPathsResponse(data: AddLibraryPathsResult): Promi
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
+function defaultDirectionForSortKey(key: TrackListSortKey): 'asc' | 'desc' {
+  return key === 'popularity' ? 'desc' : 'asc'
+}
+
 export const libraryActions = {
+  resetTrackListSort() {
+    libraryState.update((s) => ({
+      ...s,
+      trackListSort: { ...DEFAULT_TRACK_LIST_SORT },
+    }))
+  },
+
+  async toggleTrackListSort(key: TrackListSortKey): Promise<void> {
+    if (key === 'dance' && get(libraryState).selectedDanceId != null) return
+    await clearShuffleListOrdering()
+    libraryState.update((s) => {
+      const cur = s.trackListSort
+      const next =
+        cur.key === key
+          ? {
+              key,
+              direction: cur.direction === 'asc' ? ('desc' as const) : ('asc' as const),
+            }
+          : { key, direction: defaultDirectionForSortKey(key) }
+      return { ...s, trackListSort: next }
+    })
+  },
+
   clearDeferredListPopularity() {
     libraryState.update((s) =>
       Object.keys(s.deferredListPopularityByTrackId).length === 0
@@ -211,6 +246,7 @@ export const libraryActions = {
 
   setTracks(tracks: Track[]) {
     libraryActions.clearDeferredListPopularity()
+    libraryActions.resetTrackListSort()
     libraryState.update((s) => ({ ...s, tracks }))
   },
 
@@ -351,6 +387,7 @@ export const libraryActions = {
     })
 
     if (!sameDanceReselect) {
+      libraryActions.resetTrackListSort()
       libraryActions.clearDeferredListPopularity()
       void clearShuffleListOrdering()
     }
@@ -380,6 +417,7 @@ export const libraryActions = {
         selectionAnchorIndex: null,
       }
     })
+    libraryActions.resetTrackListSort()
     libraryActions.clearDeferredListPopularity()
     void clearShuffleListOrdering()
   },
@@ -562,9 +600,9 @@ export const libraryActions = {
 
   setSearchQuery(query: string) {
     const prev = get(libraryState)
-    const hadShuffleOrder =
-      prev.shuffleQueueOrderIds != null || prev.shuffleDisplayContext != null
+    const hadShuffleOrder = prev.shuffleQueueOrderIds != null || prev.shuffleDisplayContext != null
     if (prev.searchQuery !== query) {
+      libraryActions.resetTrackListSort()
       libraryActions.clearDeferredListPopularity()
     }
     libraryState.update((s) => ({ ...s, searchQuery: query }))
@@ -619,7 +657,7 @@ export const libraryActions = {
     const defer = l.deferredListPopularityByTrackId
 
     if (p.shuffle) {
-      const sorted = sortTracksByPopularity(merged, defer)
+      const sorted = sortTracksForListView(merged, l.trackListSort, defer)
       const cur = p.track
       const idx = cur ? sorted.findIndex((t) => t.id === cur.id) : 0
       const start = idx >= 0 ? idx : 0
@@ -679,7 +717,7 @@ export const libraryActions = {
     const playingId = get(playerState).track?.id
 
     libraryState.update((s) => {
-      let defer = { ...s.deferredListPopularityByTrackId }
+      const defer = { ...s.deferredListPopularityByTrackId }
       if (playingId === trackId) {
         const prevListScore = defer[trackId] ?? before.popularityScore ?? 0
         defer[trackId] = prevListScore

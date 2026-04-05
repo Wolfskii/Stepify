@@ -95,6 +95,14 @@ export interface LibraryDirectory {
   defaultDanceId?: DanceId
 }
 
+/** Column sort for the library track list (All Tracks, folder, or dance filter). */
+export type TrackListSortKey = 'popularity' | 'bpm' | 'duration' | 'title' | 'dance'
+
+export interface TrackListSort {
+  key: TrackListSortKey
+  direction: 'asc' | 'desc'
+}
+
 /** Result shape for rescan / folder watcher / add-folder scan (renderer + IPC). */
 export interface LibraryDiskSyncPayload {
   tracks: Track[]

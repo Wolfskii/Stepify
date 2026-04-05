@@ -1,4 +1,5 @@
-import type { DanceId, Track } from '@shared/types'
+import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
+import type { DanceId, Track, TrackListSort } from '@shared/types'
 
 export function normLibraryPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
@@ -57,16 +58,77 @@ export function listPopularityForSort(t: Track, listDefer?: Record<string, numbe
   return t.popularityScore ?? 0
 }
 
+export const DEFAULT_TRACK_LIST_SORT: TrackListSort = {
+  key: 'popularity',
+  direction: 'desc',
+}
+
+function tieBreakByTitle(a: Track, b: Track): number {
+  return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+}
+
+function danceNameForSort(t: Track): string {
+  const id = t.dances[0]
+  return id ? DANCE_CATEGORIES_BY_ID[id].name : ''
+}
+
+/**
+ * Sort filtered list rows by the active column. `listDefer` applies only when `sort.key === 'popularity'`.
+ */
+export function sortTracksForListView(
+  tracks: Track[],
+  sort: TrackListSort,
+  listDefer?: Record<string, number> | null,
+): Track[] {
+  const asc = sort.direction === 'asc'
+
+  return [...tracks].sort((a, b) => {
+    let cmp = 0
+
+    switch (sort.key) {
+      case 'popularity': {
+        cmp = listPopularityForSort(a, listDefer) - listPopularityForSort(b, listDefer)
+        break
+      }
+      case 'bpm': {
+        const na = a.bpm != null && a.bpm > 0 ? a.bpm : null
+        const nb = b.bpm != null && b.bpm > 0 ? b.bpm : null
+        if (na == null && nb == null) cmp = 0
+        else if (na == null) cmp = 1
+        else if (nb == null) cmp = -1
+        else cmp = na - nb
+        break
+      }
+      case 'duration': {
+        cmp = a.duration - b.duration
+        break
+      }
+      case 'title': {
+        cmp = a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+        if (cmp !== 0) return asc ? cmp : -cmp
+        return tieBreakByTitle(a, b)
+      }
+      case 'dance': {
+        cmp = danceNameForSort(a).localeCompare(danceNameForSort(b), undefined, {
+          sensitivity: 'base',
+        })
+        if (cmp !== 0) return asc ? cmp : -cmp
+        return tieBreakByTitle(a, b)
+      }
+      default:
+        cmp = 0
+    }
+
+    if (cmp !== 0) return asc ? cmp : -cmp
+    return tieBreakByTitle(a, b)
+  })
+}
+
 export function sortTracksByPopularity(
   tracks: Track[],
   listDefer?: Record<string, number> | null,
 ): Track[] {
-  return [...tracks].sort((a, b) => {
-    const sa = listPopularityForSort(a, listDefer)
-    const sb = listPopularityForSort(b, listDefer)
-    if (sb !== sa) return sb - sa
-    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
-  })
+  return sortTracksForListView(tracks, DEFAULT_TRACK_LIST_SORT, listDefer)
 }
 
 /** Higher popularity → tends to appear earlier after shuffle (exponential race / Gumbel trick). */
