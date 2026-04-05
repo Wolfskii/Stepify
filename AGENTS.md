@@ -161,18 +161,18 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 - Every sidebar click on a dance or All Tracks clears multi-selection, even when the filter does not change.
 - Track metadata identification: prefill manual catalog search from the filename and any existing artist metadata, with a reset back to that default after edits; keep explicit manual search when automatic matching is poor.
 - Metadata catalog search: merge provider results (e.g. Apple/iTunes-style and Spotify) into one list ordered by match quality—ranking should reorder hits, not discard valid results that score lower.
+- Track list columns: keep popularity, BPM, duration, and dance badges in a **right-aligned** meta group so the title column uses the remaining width; duration stays **centered** under the clock column. In a **single-dance filter** view, omit the dance name column and show only the **dance icon** (no full badge chrome) for changing dance.
 
 ## Learned Workspace Facts
 
 - Tempo slider limits are ±32% via `TEMPO_MIN_PERCENT` and `TEMPO_MAX_PERCENT` in `src/shared/constants.ts` (supersedes older ±20% examples where they conflict).
-- npm package `soundtouch-ts` is published under 1.x only; use e.g. `^1.1.1`, not `^0.1.0`, or `npm install` fails with `ETARGET`.
-- Main process imports `@electron-toolkit/utils` from `src/main/index.ts`; it must stay listed in `package.json` dependencies.
+- `soundtouch-ts` is 1.x only on npm (e.g. `^1.1.1`, not `^0.1.0` — `ETARGET` otherwise); main imports `@electron-toolkit/utils` from `src/main/index.ts` — keep it in `package.json` dependencies.
 - Renderer Content Security Policy must include `worker-src 'self' blob:` when using `web-audio-beat-detector`, which loads workers from `blob:` URLs.
 - Automatic BPM uses `web-audio-beat-detector` on decoded audio; writing back to files is supported for MP3 (`node-id3`, TBPM) and FLAC (`flac-tagger`, BPM comment); other formats store detected BPM in the library persistence layer only.
-- Lint and format use **Biome** (`npm run lint`, `npm run lint:fix`, `biome.json`). For `.svelte` files, Biome disables `noUnusedImports` / organize-imports in script blocks because symbols may be used only in the template.
-- TypeScript in Svelte (`<script lang="ts">`) requires `svelte-preprocess` wired in the Vite Svelte plugin; overly strict `noUnusedLocals` during Svelte preprocessing can strip imports used only in templates—this repo configures the preprocessor to avoid that class of failure.
+- Lint/format: **Biome** (`npm run lint`, `npm run lint:fix`, `biome.json`); in `.svelte` scripts Biome relaxes unused-import/organize rules when symbols are template-only. TypeScript in Svelte needs `svelte-preprocess` on the Vite plugin; strict unused stripping can remove template-only imports — this repo’s preprocessor avoids that.
 - Player readouts: BPM uses `referenceBpmInfo` / `adjustedBpm` from **both** `playerState.track` and `libraryState.tracks` (by id) so values set or detected after load are not stale; seek labels use **listener (wall-clock) time** at the current tempo (`currentTime/tempo`, `sourceDuration/tempo`), with `PlaybackState.sourceDuration` from the track and refreshed when the decoded buffer loads.
 - `PlayerState.playbackListDanceId` (`DanceId | null`, `null` = All Tracks) records which sidebar list context started the current queue; `TrackItem` and sidebar components compare it to the active filter so “now playing” and queue actions stay scoped to that context.
+- Track **popularity** (`Track.popularityScore`, like +1 / dislike −1) drives default list order and **weighted shuffle** (higher scores tend earlier); main enforces a **10 minute per-track cooldown** on `library:adjust-track-popularity`, with the Now Playing bar mirroring the lock in UI.
 - `NowPlayingBar` seek control uses a layered track gradient (played portion, optional hover preview segment toward the pointer, dim remainder); the range thumb is shown on shell hover, while scrubbing, or when the control has keyboard focus (`:focus-visible`).
 - Do not open Electron DevTools automatically on app startup, including when running `task dev` / `npm run dev`.
 - When the user applies metadata from a catalog match, rename the local audio file on disk to `Artist - Title` when the rename pipeline supports that track and path.

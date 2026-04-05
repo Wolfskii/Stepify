@@ -200,20 +200,27 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   <!-- Column labels -->
   {#if $filteredTracks.length > 0}
     <div class="track-list__cols" role="row" aria-label="Track list columns">
-      <div class="track-list__lead">
-        <div role="columnheader" class="track-list__col track-list__col--index">#</div>
-        <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
-      </div>
-      <div class="track-list__meta-cols" class:track-list__meta-cols--no-dance={$selectedDanceId}>
-        {#if !$selectedDanceId}
-          <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
-        {/if}
+      <div role="columnheader" class="track-list__col track-list__col--index">#</div>
+      <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
+      <div class="track-list__meta-cols" class:track-list__meta-cols--dance-filter={$selectedDanceId}>
         <div
           role="columnheader"
           class="track-list__col track-list__col--popularity"
           title="Likes minus dislikes for this track"
+          aria-label="Popularity: likes minus dislikes"
         >
-          Pop.
+          <svg
+            class="track-list__popularity-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+            />
+          </svg>
         </div>
         <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
         <div
@@ -239,8 +246,14 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             />
           </svg>
         </div>
-        {#if $selectedDanceId}
-          <div role="columnheader" class="track-list__col track-list__col--actions" aria-hidden="true"></div>
+        {#if !$selectedDanceId}
+          <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
+        {:else}
+          <div
+            role="columnheader"
+            class="track-list__col track-list__col--dance-icon-slot"
+            aria-hidden="true"
+          ></div>
         {/if}
       </div>
     </div>
@@ -261,7 +274,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             From <strong>All Tracks</strong>: drag rows onto a dance in the sidebar, or use
             <strong>Ctrl/Cmd+click</strong> / <strong>Shift+click</strong> to select several, then drag
             onto a dance. You can also use the dance column on each row there to set or change the dance.
-            On this screen, use the <strong>dance label</strong> on each row to change dance or set
+            On this screen, use the <strong>tag icon</strong> on each row to change dance or set
             <strong>None</strong>. <strong>Delete</strong> / <strong>Backspace</strong> still removes the
             selected tracks from this dance only.
           </p>
@@ -297,6 +310,8 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   .track-list {
     display: flex;
     flex-direction: column;
+    align-self: stretch;
+    width: 100%;
     height: 100%;
     min-width: 0;
     overflow: hidden;
@@ -433,14 +448,14 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     color: var(--color-text-primary);
   }
 
-  /*
-   * Match track rows: flexible #+title | meta strip (see .track-item__meta in TrackItem.svelte).
-   */
+  /* Same three-column grid as .track-item: # | title (1fr) | meta */
   .track-list__cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 36px minmax(320px, 1fr) max-content;
     column-gap: var(--space-4);
-    row-gap: var(--space-2);
+    align-items: center;
+    width: 100%;
+    min-width: 0;
     padding: var(--space-2) var(--space-4);
     font-size: 12px;
     font-weight: 600;
@@ -449,15 +464,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     color: var(--color-tracklist-column-label);
     border-bottom: 1px solid var(--color-border-subtle);
     flex-shrink: 0;
-    min-width: 0;
-  }
-
-  .track-list__lead {
-    display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
-    column-gap: var(--space-3);
-    align-items: center;
-    min-width: 0;
   }
 
   /*
@@ -468,24 +474,31 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     display: flex;
     align-items: center;
     min-width: 0;
+    margin-inline-end: var(--space-3);
     overflow: hidden;
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* Pop. · BPM · time · dance (or narrow icon slot in dance-filter view) */
   .track-list__meta-cols {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    grid-template-columns: minmax(72px, 152px) 72px 76px 52px;
-    flex-shrink: 0;
+    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
     min-width: 0;
     justify-items: start;
   }
 
-  .track-list__meta-cols--no-dance {
-    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
+  .track-list__meta-cols--dance-filter {
+    grid-template-columns: 72px 76px 52px 36px;
+  }
+
+  .track-list__col--dance-icon-slot {
+    justify-self: center;
+    width: 100%;
+    padding: 0;
   }
 
   .track-list__col {
@@ -501,15 +514,25 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   }
 
   .track-list__col--dance {
-    text-align: right;
+    justify-self: stretch;
+    text-align: left;
   }
 
   .track-list__col--popularity {
-    justify-self: center;
-    text-align: center;
+    justify-self: stretch;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-transform: none;
-    font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
+  }
+
+  .track-list__popularity-icon {
+    display: block;
+    flex-shrink: 0;
+    color: var(--color-tracklist-column-label);
+    opacity: 0.95;
   }
 
   .track-list__col--bpm {
@@ -533,19 +556,15 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     color: var(--color-tracklist-column-label);
   }
 
-  .track-list__col--actions {
-    width: 32px;
-    min-width: 32px;
-    padding: 0;
-  }
-
   .track-list__rows {
     flex: 1;
     min-width: 0;
+    width: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     /* Horizontal padding only on rows — matches .track-list__cols so cells line up */
     padding: var(--space-2) var(--space-4);
+    box-sizing: border-box;
   }
 
   .track-list__empty {

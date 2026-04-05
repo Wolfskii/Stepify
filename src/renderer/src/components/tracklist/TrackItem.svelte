@@ -85,6 +85,8 @@ function openTrackMetadata() {
 $: primaryDanceId = track.dances[0]
 $: filterDanceMeta = filterDanceId ? DANCE_CATEGORIES_BY_ID[filterDanceId] : null
 $: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
+/** Shown on the last-column badge: filtered dance name, assigned dance, or None. */
+$: danceBadgeMeta = filterDanceId ? filterDanceMeta : primaryDance
 $: popScore = track.popularityScore ?? 0
 
 function onRowClick(e: MouseEvent) {
@@ -118,40 +120,39 @@ function onDragStart(e: DragEvent) {
   on:keydown={(e) => e.key === 'Enter' && play()}
   on:dragstart={onDragStart}
 >
-  <div class="track-item__lead" role="gridcell">
-    <div class="track-item__index">
-      <span class="track-item__num" class:hidden={isCurrentlyPlaying}>
-        {index + 1}
-      </span>
+  <div class="track-item__index" role="gridcell">
+    <span class="track-item__num" class:hidden={isCurrentlyPlaying}>
+      {index + 1}
+    </span>
+    {#if isCurrentlyPlaying}
+      <div class="track-item__equalizer" aria-hidden="true">
+        <span class="track-item__eq-bar track-item__eq-bar--a"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--b"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--c"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--d"></span>
+      </div>
+    {/if}
+    <button
+      type="button"
+      class="track-item__play-btn"
+      class:track-item__play-btn--playing={isCurrentlyPlaying}
+      aria-label={isCurrentlyPlaying ? 'Pause' : 'Play'}
+      on:click|stopPropagation={togglePlay}
+    >
       {#if isCurrentlyPlaying}
-        <div class="track-item__equalizer" aria-hidden="true">
-          <span class="track-item__eq-bar track-item__eq-bar--a"></span>
-          <span class="track-item__eq-bar track-item__eq-bar--b"></span>
-          <span class="track-item__eq-bar track-item__eq-bar--c"></span>
-          <span class="track-item__eq-bar track-item__eq-bar--d"></span>
-        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="1" width="3.5" height="10" rx="1" />
+          <rect x="7.5" y="1" width="3.5" height="10" rx="1" />
+        </svg>
+      {:else}
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+          <path d="M2 1.5L10.5 6L2 10.5V1.5Z" />
+        </svg>
       {/if}
-      <button
-        type="button"
-        class="track-item__play-btn"
-        class:track-item__play-btn--playing={isCurrentlyPlaying}
-        aria-label={isCurrentlyPlaying ? 'Pause' : 'Play'}
-        on:click|stopPropagation={togglePlay}
-      >
-        {#if isCurrentlyPlaying}
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-            <rect x="1" y="1" width="3.5" height="10" rx="1" />
-            <rect x="7.5" y="1" width="3.5" height="10" rx="1" />
-          </svg>
-        {:else}
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-            <path d="M2 1.5L10.5 6L2 10.5V1.5Z" />
-          </svg>
-        {/if}
-      </button>
-    </div>
+    </button>
+  </div>
 
-    <div class="track-item__title-group">
+  <div class="track-item__title-group" role="gridcell">
       <button
         type="button"
         class="track-item__art track-item__art--btn"
@@ -190,40 +191,12 @@ function onDragStart(e: DragEvent) {
         <span class="track-item__artist truncate">{track.artist}</span>
       </div>
     </div>
-  </div>
 
   <div
     class="track-item__meta"
-    class:track-item__meta--no-dance={filterDanceId}
+    class:track-item__meta--dance-filter={filterDanceId}
     role="gridcell"
   >
-    {#if !filterDanceId}
-      <div class="track-item__dances">
-        {#if primaryDance}
-          <button
-            type="button"
-            class="dance-tag dance-tag--btn"
-            style="--dance-color: {primaryDance.color}"
-            title="Change dance"
-            aria-label="Change dance for {track.title}"
-            on:click|stopPropagation={openAssignDance}
-          >
-            {primaryDance.name}
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="dance-tag dance-tag--btn dance-tag--none"
-            title="Set dance"
-            aria-label="No dance set — choose a dance for {track.title}"
-            on:click|stopPropagation={openAssignDance}
-          >
-            None
-          </button>
-        {/if}
-      </div>
-    {/if}
-
     <div
       class="track-item__popularity"
       class:track-item__popularity--up={popScore > 0}
@@ -303,17 +276,24 @@ function onDragStart(e: DragEvent) {
       {formatDuration(track.duration)}
     </div>
 
-    {#if filterDanceId && filterDanceMeta}
-      <div class="track-item__actions">
+    <div class="track-item__actions" class:track-item__actions--dance-filter={filterDanceId}>
+      {#if filterDanceId}
         <button
           type="button"
-          class="track-item__dance-change-btn"
-          style="--dance-color: {filterDanceMeta.color}"
-          on:click|stopPropagation={openAssignDance}
+          class="track-item__dance-icon-btn"
+          style={filterDanceMeta ? `--dance-accent: ${filterDanceMeta.color}` : undefined}
           title="Change dance or set to none"
           aria-label="Change dance for {track.title}"
+          on:click|stopPropagation={openAssignDance}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="track-item__dance-change-icon" aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            class="track-item__dance-icon-btn__svg"
+            aria-hidden="true"
+          >
             <path
               d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
               stroke="currentColor"
@@ -323,42 +303,65 @@ function onDragStart(e: DragEvent) {
             />
             <circle cx="7" cy="7" r="1.25" fill="currentColor" />
           </svg>
-          <span class="track-item__dance-change-label truncate">{filterDanceMeta.name}</span>
         </button>
-      </div>
-    {/if}
+      {:else}
+        <button
+          type="button"
+          class="track-item__dance-change-btn"
+          class:track-item__dance-change-btn--none={!danceBadgeMeta}
+          style={danceBadgeMeta ? `--dance-color: ${danceBadgeMeta.color}` : undefined}
+          title={!danceBadgeMeta ? 'Set dance' : 'Change dance'}
+          aria-label={!danceBadgeMeta
+            ? `No dance set — choose a dance for ${track.title}`
+            : `Change dance for ${track.title}`}
+          on:click|stopPropagation={openAssignDance}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            class="track-item__dance-change-icon"
+            aria-hidden="true"
+          >
+            <path
+              d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <circle cx="7" cy="7" r="1.25" fill="currentColor" />
+          </svg>
+          <span class="track-item__dance-change-label truncate">{danceBadgeMeta?.name ?? 'None'}</span>
+        </button>
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
   /*
-   * Two-column row: flexible #+title (never overlapped) | fixed meta strip (dance, BPM, …).
+   * Three tracks: # (fixed) | title (1fr, absorbs space) | meta (max-content, right edge).
+   * Avoids nesting 1fr inside a single “lead” cell so the meta strip pins to the row’s right edge.
    * Keep .track-item__meta grid in sync with .track-list__meta-cols (TrackList.svelte).
    */
   .track-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 36px minmax(320px, 1fr) max-content;
     column-gap: var(--space-4);
     align-items: center;
+    width: 100%;
+    min-width: 0;
     padding: var(--space-2) 0;
     border-radius: var(--radius-track-row);
-    /* HTML5 draggable can show a grab cursor; keep default over the row */
     cursor: default;
     user-select: none;
     transition: background var(--duration-fast) var(--ease-out);
-    min-width: 0;
   }
 
   .track-item[draggable='true'] {
     cursor: default;
-  }
-
-  .track-item__lead {
-    display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
-    column-gap: var(--space-3);
-    align-items: center;
-    min-width: 0;
   }
 
   .track-item__title-group {
@@ -366,6 +369,7 @@ function onDragStart(e: DragEvent) {
     align-items: center;
     gap: var(--space-3);
     min-width: 0;
+    margin-inline-end: var(--space-3);
   }
 
   .track-item__art {
@@ -421,20 +425,18 @@ function onDragStart(e: DragEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    /* Dance · Pop. · BPM · time — actions column only in dance-filtered view */
-    grid-template-columns: minmax(72px, 152px) 72px 76px 52px;
-    flex-shrink: 0;
+    /* Pop. · BPM · time · dance badge (or narrow icon in dance-filter view) */
+    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
     min-width: 0;
     justify-items: start;
     cursor: default;
   }
 
-  /* Single-dance list: Pop. · BPM · time · dance label + tag */
-  .track-item__meta--no-dance {
-    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
+  .track-item__meta--dance-filter {
+    grid-template-columns: 72px 76px 52px 36px;
   }
 
-  .track-item__meta :is(button, .dance-tag--btn) {
+  .track-item__meta :is(button) {
     cursor: pointer;
   }
 
@@ -662,67 +664,6 @@ function onDragStart(e: DragEvent) {
     color: rgba(255, 255, 255, 0.55);
   }
 
-  /* Dance tags — right side of meta strip, never bleed into title */
-  .track-item__dances {
-    display: flex;
-    gap: var(--space-1);
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    align-content: center;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .dance-tag {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--dance-color) 15%, transparent);
-    color: var(--dance-color);
-    white-space: nowrap;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .dance-tag--btn {
-    font-family: inherit;
-    border: none;
-    cursor: pointer;
-    text-align: center;
-    transition:
-      background var(--duration-fast) var(--ease-out),
-      filter var(--duration-fast) var(--ease-out);
-  }
-
-  .dance-tag--btn:hover {
-    filter: brightness(1.12);
-  }
-
-  .dance-tag--btn:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-  }
-
-  .dance-tag--none {
-    --dance-color: #c8c8c8;
-    background: rgba(255, 255, 255, 0.14);
-    color: #e8e8e8;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-  }
-
-  .dance-tag--none:hover {
-    background: rgba(255, 255, 255, 0.2);
-    filter: none;
-  }
-
-  .dance-tag--more {
-    --dance-color: var(--color-text-muted);
-    background: var(--color-bg-overlay);
-    color: var(--color-text-muted);
-  }
-
   /* BPM */
   .track-item__bpm {
     display: flex;
@@ -769,12 +710,13 @@ function onDragStart(e: DragEvent) {
     width: 100%;
   }
 
-  /* Actions — narrow column, hug right edge of row */
+  /* Last column: tag icon + dance label (All Tracks, folder, and dance views) */
   .track-item__dance-change-btn {
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
+    width: auto;
     max-width: 100%;
     min-width: 0;
     padding: var(--space-1) var(--space-2);
@@ -782,6 +724,7 @@ function onDragStart(e: DragEvent) {
     border: 1px solid color-mix(in srgb, var(--dance-color) 38%, var(--color-border-subtle));
     background: color-mix(in srgb, var(--dance-color) 12%, var(--color-bg-elevated));
     color: var(--color-text-secondary);
+    font-family: inherit;
     font-size: 11px;
     font-weight: 600;
     text-align: left;
@@ -791,10 +734,35 @@ function onDragStart(e: DragEvent) {
       color var(--duration-fast) var(--ease-out);
   }
 
+  .track-item__dance-change-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
   .track-item__dance-change-btn:hover {
     background: color-mix(in srgb, var(--dance-color) 20%, var(--color-bg-overlay));
     color: var(--color-text-primary);
     border-color: color-mix(in srgb, var(--dance-color) 50%, var(--color-border));
+  }
+
+  .track-item__dance-change-btn--none {
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-muted);
+  }
+
+  .track-item__dance-change-btn--none:hover {
+    background: var(--color-bg-overlay);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+  }
+
+  .track-item__dance-change-btn--none .track-item__dance-change-icon {
+    color: var(--color-text-muted);
+  }
+
+  .track-item__dance-change-btn--none:hover .track-item__dance-change-icon {
+    color: var(--color-text-secondary);
   }
 
   .track-item__dance-change-icon {
@@ -809,29 +777,44 @@ function onDragStart(e: DragEvent) {
   .track-item__actions {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     min-width: 0;
-    gap: 2px;
-    opacity: 0;
-    transition: opacity var(--duration-fast) var(--ease-out);
   }
 
-  .track-item:hover .track-item__actions,
-  .track-item.row-selected .track-item__actions {
-    opacity: 1;
+  .track-item__actions--dance-filter {
+    justify-content: center;
   }
 
-  .track-item__action-btn {
-    width: 26px;
-    height: 26px;
+  .track-item__dance-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 6px;
+    margin: 0;
+    border: none;
     border-radius: var(--radius-md);
-    color: var(--color-text-muted);
-    transition: color var(--duration-fast), background var(--duration-fast);
+    background: transparent;
+    color: var(--dance-accent, var(--color-text-muted));
+    cursor: pointer;
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      background var(--duration-fast) var(--ease-out);
   }
 
-  .track-item__action-btn:hover {
-    color: var(--color-text-primary);
-    background: var(--color-bg-overlay);
+  .track-item__dance-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--dance-accent, var(--color-text-primary));
+  }
+
+  .track-item__dance-icon-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .track-item__dance-icon-btn__svg {
+    display: block;
+    flex-shrink: 0;
   }
 </style>
