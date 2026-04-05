@@ -159,6 +159,8 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 - Track list: for the playing row, only the title uses the accent color; the artist line stays normal secondary text.
 - Sidebar library: do not show per-dance track counts; indicate which dance (or All Tracks) owns the active queue with a playback-source marker (e.g. speaker), similar to Spotify.
 - Every sidebar click on a dance or All Tracks clears multi-selection, even when the filter does not change.
+- Track metadata identification: prefill manual catalog search from the filename and any existing artist metadata, with a reset back to that default after edits; keep explicit manual search when automatic matching is poor.
+- Metadata catalog search: merge provider results (e.g. Apple/iTunes-style and Spotify) into one list ordered by match quality—ranking should reorder hits, not discard valid results that score lower.
 
 ## Learned Workspace Facts
 
@@ -169,7 +171,8 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 - Automatic BPM uses `web-audio-beat-detector` on decoded audio; writing back to files is supported for MP3 (`node-id3`, TBPM) and FLAC (`flac-tagger`, BPM comment); other formats store detected BPM in the library persistence layer only.
 - Lint and format use **Biome** (`npm run lint`, `npm run lint:fix`, `biome.json`). For `.svelte` files, Biome disables `noUnusedImports` / organize-imports in script blocks because symbols may be used only in the template.
 - TypeScript in Svelte (`<script lang="ts">`) requires `svelte-preprocess` wired in the Vite Svelte plugin; overly strict `noUnusedLocals` during Svelte preprocessing can strip imports used only in templates—this repo configures the preprocessor to avoid that class of failure.
-- Player BPM readout uses `referenceBpmInfo` / `adjustedBpm` derived from **both** `playerState.track` and `libraryState.tracks` (by id) so values set or detected after load still show without stale queue copies.
-- Seek bar labels use **listener (wall-clock) time** at the current tempo (`currentTime/tempo`, `sourceDuration/tempo`); `PlaybackState.sourceDuration` is set from the track and refreshed when the decoded buffer loads.
+- Player readouts: BPM uses `referenceBpmInfo` / `adjustedBpm` from **both** `playerState.track` and `libraryState.tracks` (by id) so values set or detected after load are not stale; seek labels use **listener (wall-clock) time** at the current tempo (`currentTime/tempo`, `sourceDuration/tempo`), with `PlaybackState.sourceDuration` from the track and refreshed when the decoded buffer loads.
 - `PlayerState.playbackListDanceId` (`DanceId | null`, `null` = All Tracks) records which sidebar list context started the current queue; `TrackItem` and sidebar components compare it to the active filter so “now playing” and queue actions stay scoped to that context.
 - `NowPlayingBar` seek control uses a layered track gradient (played portion, optional hover preview segment toward the pointer, dim remainder); the range thumb is shown on shell hover, while scrubbing, or when the control has keyboard focus (`:focus-visible`).
+- Do not open Electron DevTools automatically on app startup, including when running `task dev` / `npm run dev`.
+- When the user applies metadata from a catalog match, rename the local audio file on disk to `Artist - Title` when the rename pipeline supports that track and path.

@@ -6,6 +6,11 @@ import fg from 'fast-glob'
 import { SUPPORTED_AUDIO_GLOB } from '../../shared/constants'
 import type { DanceId, Track, UpdateTrackMetadataPayload } from '../../shared/types'
 import {
+  buildArtistTitleBasename,
+  renameFileCarefully,
+  resolveRenamedAudioPath,
+} from './audioFilenameRename'
+import {
   type PicturePayload,
   parseDataUrlImage,
   writeAudioFileMetadata,
@@ -37,6 +42,25 @@ function localPathKey(filePath: string): string {
 function libraryDirEntryForPath(dirPath: string) {
   const key = localPathKey(dirPath)
   return settingsService.getLibraryDirectories().find((d) => localPathKey(d.path) === key)
+}
+
+/** Rename on-disk file to `Artist - Title.ext` in the same folder; returns new absolute path. */
+async function renameLocalAudioToArtistTitle(
+  oldPath: string,
+  artist: string,
+  title: string,
+): Promise<{ newPath: string } | { error: string }> {
+  const extRaw = extname(oldPath)
+  if (!extRaw) return { newPath: oldPath }
+  const ext = extRaw.toLowerCase()
+  try {
+    const base = buildArtistTitleBasename(artist, title)
+    const target = await resolveRenamedAudioPath(oldPath, base, ext)
+    await renameFileCarefully(oldPath, target)
+    return { newPath: target }
+  } catch (e) {
+    return { error: String(e) }
+  }
 }
 
 function trackLibraryFieldsChanged(before: Track, after: Track): boolean {
@@ -383,7 +407,26 @@ export const libraryService = {
       } catch (e) {
         return { ok: false, error: String(e) }
       }
-      const re = await this.rehydrateLocalTrackFromFile(track)
+
+      const renamed = await renameLocalAudioToArtistTitle(track.localPath, artist, title)
+      if ('error' in renamed) {
+        return { ok: false, error: renamed.error }
+      }
+      const newPath = renamed.newPath
+
+      const interim: Track = {
+        ...track,
+        localPath: newPath,
+        title,
+        artist,
+        album: album ?? track.album,
+        missingEmbeddedTitle: false,
+        missingEmbeddedArtist: false,
+        missingEmbeddedArt: track.missingEmbeddedArt,
+      }
+      this.upsertTrack(interim)
+
+      const re = await this.rehydrateLocalTrackFromFile(interim, newPath)
       if (!re) return { ok: false, error: 'Could not re-read audio file' }
       const merged: Track = {
         ...re,
@@ -394,6 +437,12 @@ export const libraryService = {
       this.upsertTrack(merged)
       return { ok: true, track: merged }
     }
+
+    const renamedOther = await renameLocalAudioToArtistTitle(track.localPath, artist, title)
+    if ('error' in renamedOther) {
+      return { ok: false, error: renamedOther.error }
+    }
+    const newPathOther = renamedOther.newPath
 
     let artworkUrl = track.artworkUrl
     if (picture) {
@@ -408,6 +457,7 @@ export const libraryService = {
 
     const merged: Track = {
       ...track,
+      localPath: newPathOther,
       title,
       artist,
       album: album ?? track.album,

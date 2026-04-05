@@ -12,7 +12,8 @@ import { libraryState, libraryActions } from '../../stores/library.store'
 import { buildDefaultCatalogSearchQuery, buildMetadataSearchQuery } from '../../utils/metadataQuery'
 
 const RESULTS_PAGE_SIZE = 5
-const RESULTS_MAX_PAGES = 5
+/** iTunes ~25 + Spotify up to 30 (3×10 API pages); scoring reorders only. */
+const RESULTS_MAX_PAGES = 11
 
 $: queue = $trackMetadataQueueIds
 $: total = $trackMetadataWizardTotal
