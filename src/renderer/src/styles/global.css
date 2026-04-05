@@ -1,0 +1,219 @@
+/* ─── Design Tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* Spotify-inspired palette */
+  --color-bg-base: #000000;
+  --color-bg-surface: #121212;
+  --color-bg-elevated: #1a1a1a;
+  --color-bg-overlay: #2a2a2a;
+
+  /* Borders */
+  --color-border: #282828;
+  --color-border-subtle: #282828;
+
+  /* Text */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b3b3b3;
+  --color-text-muted: #6a6a6a;
+  --color-text-inverse: #000000;
+
+  /* Accent — Spotify green */
+  --color-accent: #1db954;
+  --color-accent-hover: #1ed760;
+  --color-accent-muted: rgba(29, 185, 84, 0.15);
+  --color-accent-glow: rgba(29, 185, 84, 0.35);
+
+  /* Track list rows */
+  --color-track-row-hover: #2a2a2a;
+  --color-track-row-active: #5a5a5a;
+  --color-track-row-selected: #5a5a5a;
+  --color-track-row-highlight-hover: #626262;
+  --color-track-row-numeric: #b1b1b1; /* BPM + duration on hover / selected */
+  /* Track list # column, column headers, clock icon */
+  --color-tracklist-column-label: #d2d2d2;
+  --radius-track-row: 6px;
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #38bdf8;
+
+  /* Dance category colors (mirrors constants.ts) */
+  --color-dance-samba: #eab308;
+  --color-dance-cha-cha: #f97316;
+  --color-dance-rumba: #ec4899;
+  --color-dance-paso-doble: #dc2626;
+  --color-dance-jive: #7c3aed;
+  --color-dance-slow-waltz: #06b6d4;
+  --color-dance-tango: #1d4ed8;
+  --color-dance-viennese-waltz: #0ea5e9;
+  --color-dance-foxtrot: #10b981;
+  --color-dance-quickstep: #f59e0b;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Sizing */
+  --sidebar-width: 220px;
+  --player-sidebar-width: 300px;
+  --now-playing-height: 96px;
+  --topbar-height: 0px; /* no top bar — custom window controls via OS */
+  /* Floating panels (Spotify-style cards) */
+  --radius-panel: 8px;
+  --shell-gap: 8px;
+  --shell-pad: 8px;
+  --radius-art: 4px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 350ms;
+
+  /* Scrollbar */
+  --scrollbar-width: 6px;
+}
+
+/* ─── Reset ──────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background: var(--color-bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────────── */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────────── */
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Inputs ─────────────────────────────────────────────────────────────────── */
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-accent);
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

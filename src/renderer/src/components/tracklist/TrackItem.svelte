@@ -1,0 +1,605 @@
+<script lang="ts">
+import type { Track, DanceId } from '@shared/types'
+import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
+import { currentTrack, isPlaying, playerActions, playerState } from '../../stores/player.store'
+import { audioEngine } from '../../services/audioEngine'
+import { uiActions } from '../../stores/ui.store'
+import { libraryActions, selectedTrackIds } from '../../stores/library.store'
+
+const TRACK_DRAG_MIME = 'application/x-stepify-tracks'
+
+export let track: Track
+export let index: number
+export let queue: Track[]
+/** When set (dance filter view), show remove-from-this-dance control */
+export let filterDanceId: DanceId | null = null
+
+$: isCurrent = $currentTrack?.id === track.id
+/** “Now playing” row treatment only in the list where playback was started */
+$: listContextMatches = $playerState.playbackListDanceId === filterDanceId
+$: showAsPlayingRow = isCurrent && listContextMatches
+$: isCurrentlyPlaying = showAsPlayingRow && $isPlaying
+$: isRowSelected = $selectedTrackIds.includes(track.id)
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+async function play() {
+  playerActions.setQueue(queue, index, filterDanceId)
+  await audioEngine.load(track)
+  // List play always starts from the beginning; load() may noop if already buffered.
+  audioEngine.seek(0)
+  playerActions.setCurrentTime(0)
+  audioEngine.play()
+  playerActions.play()
+}
+
+async function togglePlay() {
+  // Same file as global current track, but another list (e.g. All Tracks vs Samba): play = restart from this queue
+  if (!isCurrent || !listContextMatches) {
+    await play()
+    return
+  }
+  if ($isPlaying) {
+    audioEngine.pause()
+    playerActions.pause()
+  } else {
+    audioEngine.play()
+    playerActions.play()
+  }
+}
+
+function openAssignDance() {
+  uiActions.openModal('assign-dance', { trackId: track.id })
+}
+
+async function removeFromCurrentDance() {
+  if (!filterDanceId) return
+  await libraryActions.unassignTracksFromDance([track.id], filterDanceId)
+}
+
+async function clearDanceTagOnAllTracks() {
+  if (!primaryDanceId) return
+  await libraryActions.unassignTracksFromDance([track.id], primaryDanceId)
+}
+
+$: primaryDanceId = track.dances[0]
+$: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
+
+function onRowClick(e: MouseEvent) {
+  const el = e.target as HTMLElement | null
+  if (el?.closest('button')) return
+  libraryActions.handleTrackRowClick(track.id, index, queue, e)
+}
+
+function onDragStart(e: DragEvent) {
+  const dt = e.dataTransfer
+  if (!dt) return
+  const sel = $selectedTrackIds
+  const ids = sel.length > 0 && sel.includes(track.id) ? sel : [track.id]
+  dt.setData(TRACK_DRAG_MIME, JSON.stringify(ids))
+  dt.effectAllowed = 'copy'
+}
+</script>
+
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<div
+  class="track-item"
+  class:row-selected={isRowSelected}
+  class:track-item--current={showAsPlayingRow}
+  role="row"
+  aria-selected={isRowSelected}
+  aria-current={showAsPlayingRow ? 'true' : undefined}
+  draggable="true"
+  on:click={onRowClick}
+  on:dblclick={play}
+  tabindex="0"
+  on:keydown={(e) => e.key === 'Enter' && play()}
+  on:dragstart={onDragStart}
+>
+  <div class="track-item__lead" role="gridcell">
+    <div class="track-item__index">
+      <span class="track-item__num" class:hidden={isCurrentlyPlaying}>
+        {index + 1}
+      </span>
+      {#if isCurrentlyPlaying}
+        <div class="track-item__equalizer" aria-hidden="true">
+          <span class="track-item__eq-bar track-item__eq-bar--a"></span>
+          <span class="track-item__eq-bar track-item__eq-bar--b"></span>
+          <span class="track-item__eq-bar track-item__eq-bar--c"></span>
+          <span class="track-item__eq-bar track-item__eq-bar--d"></span>
+        </div>
+      {/if}
+      <button
+        type="button"
+        class="track-item__play-btn"
+        class:track-item__play-btn--playing={isCurrentlyPlaying}
+        aria-label={isCurrentlyPlaying ? 'Pause' : 'Play'}
+        on:click|stopPropagation={togglePlay}
+      >
+        {#if isCurrentlyPlaying}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+            <rect x="1" y="1" width="3.5" height="10" rx="1" />
+            <rect x="7.5" y="1" width="3.5" height="10" rx="1" />
+          </svg>
+        {:else}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+            <path d="M2 1.5L10.5 6L2 10.5V1.5Z" />
+          </svg>
+        {/if}
+      </button>
+    </div>
+
+    <div class="track-item__title-group">
+      <div class="track-item__art" aria-hidden="true">
+        {#if track.artworkUrl}
+          <img
+            src={track.artworkUrl}
+            alt=""
+            width="40"
+            height="40"
+            loading="lazy"
+            decoding="async"
+          />
+        {:else}
+          <div class="track-item__art-ph">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M9 18V5l12-2v13"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.5" />
+              <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+          </div>
+        {/if}
+      </div>
+
+      <div class="track-item__info">
+        <span class="track-item__title truncate">{track.title}</span>
+        <span class="track-item__artist truncate">{track.artist}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="track-item__meta" role="gridcell">
+    <div class="track-item__dances">
+      {#if primaryDance}
+        <button
+          type="button"
+          class="dance-tag dance-tag--btn"
+          style="--dance-color: {primaryDance.color}"
+          title="Change dance"
+          aria-label="Change dance for {track.title}"
+          on:click|stopPropagation={openAssignDance}
+        >
+          {primaryDance.name}
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="dance-tag dance-tag--btn dance-tag--none"
+          title="Set dance"
+          aria-label="No dance set — choose a dance for {track.title}"
+          on:click|stopPropagation={openAssignDance}
+        >
+          None
+        </button>
+      {/if}
+    </div>
+
+    {#if track.bpm}
+      <div class="track-item__bpm">
+        <span>{track.bpm}</span>
+        <span class="track-item__bpm-unit">BPM</span>
+      </div>
+    {:else}
+      <div class="track-item__bpm track-item__bpm--empty">—</div>
+    {/if}
+
+    <div class="track-item__duration">
+      {formatDuration(track.duration)}
+    </div>
+
+    <div class="track-item__actions">
+    {#if filterDanceId && track.dances.includes(filterDanceId)}
+      <button
+        class="track-item__action-btn"
+        on:click|stopPropagation={removeFromCurrentDance}
+        title="Remove from this dance"
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    {/if}
+    {#if !filterDanceId && primaryDanceId}
+      <button
+        class="track-item__action-btn"
+        on:click|stopPropagation={clearDanceTagOnAllTracks}
+        title="Clear dance tag"
+        aria-label="Clear dance tag for {track.title}"
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    {/if}
+    </div>
+  </div>
+</div>
+
+<style>
+  /*
+   * Two-column row: flexible #+title (never overlapped) | fixed meta strip (dance, BPM, …).
+   * Keep .track-item__meta grid in sync with .track-list__meta-cols (TrackList.svelte).
+   */
+  .track-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-4);
+    align-items: center;
+    padding: var(--space-2) 0;
+    border-radius: var(--radius-track-row);
+    /* HTML5 draggable can show a grab cursor; keep default over the row */
+    cursor: default;
+    user-select: none;
+    transition: background var(--duration-fast) var(--ease-out);
+    min-width: 0;
+  }
+
+  .track-item[draggable='true'] {
+    cursor: default;
+  }
+
+  .track-item__lead {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    column-gap: var(--space-3);
+    align-items: center;
+    min-width: 0;
+  }
+
+  .track-item__title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .track-item__art {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--radius-art);
+    overflow: hidden;
+    background: var(--color-bg-overlay);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .track-item__art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .track-item__art-ph {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+  }
+
+  .track-item__meta {
+    display: grid;
+    column-gap: var(--space-3);
+    align-items: center;
+    /* Dance · BPM · time — keep tight; actions only need one 26px button */
+    grid-template-columns: minmax(72px, 152px) 76px 52px 32px;
+    flex-shrink: 0;
+    min-width: 0;
+    justify-items: start;
+    cursor: default;
+  }
+
+  .track-item__meta :is(button, .dance-tag--btn) {
+    cursor: pointer;
+  }
+
+  .track-item:hover {
+    background: var(--color-track-row-hover);
+  }
+
+  .track-item.row-selected {
+    background: var(--color-track-row-selected);
+  }
+
+  .track-item.row-selected:hover {
+    background: var(--color-track-row-highlight-hover);
+  }
+
+  .track-item:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  /* Index / play button */
+  .track-item__index {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+  }
+
+  .track-item__num {
+    font-size: 13px;
+    color: var(--color-tracklist-column-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .track-item__num.hidden {
+    opacity: 0;
+  }
+
+  /* Spotify-style equalizer while this row is the playing track */
+  .track-item__equalizer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    padding-bottom: 8px;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .track-item__index:hover .track-item__equalizer {
+    opacity: 0;
+  }
+
+  .track-item__eq-bar {
+    width: 3px;
+    height: 11px;
+    border-radius: 1px;
+    background: var(--color-accent);
+    transform: scaleY(0.32);
+    transform-origin: bottom center;
+    animation: track-item-eq 0.55s ease-in-out infinite;
+  }
+
+  .track-item__eq-bar--a {
+    animation-duration: 0.5s;
+    animation-delay: 0s;
+  }
+
+  .track-item__eq-bar--b {
+    animation-duration: 0.7s;
+    animation-delay: 0.12s;
+  }
+
+  .track-item__eq-bar--c {
+    animation-duration: 0.58s;
+    animation-delay: 0.2s;
+  }
+
+  .track-item__eq-bar--d {
+    animation-duration: 0.66s;
+    animation-delay: 0.06s;
+  }
+
+  @keyframes track-item-eq {
+    0%,
+    100% {
+      transform: scaleY(0.28);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .track-item__eq-bar {
+      animation: none;
+      transform: scaleY(0.65);
+    }
+  }
+
+  .track-item__play-btn {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .track-item:hover .track-item__play-btn:not(.track-item__play-btn--playing) {
+    opacity: 1;
+  }
+
+  .track-item__index:hover .track-item__play-btn--playing {
+    opacity: 1;
+  }
+
+  .track-item:hover .track-item__num:not(.hidden) {
+    opacity: 0;
+  }
+
+  /* Info */
+  .track-item__info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .track-item__title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .track-item__artist {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+
+  /* Now playing: accent title only — row background is not “selected” */
+  .track-item--current .track-item__title {
+    color: var(--color-accent);
+  }
+
+  .track-item:hover .track-item__duration,
+  .track-item.row-selected .track-item__duration {
+    color: var(--color-track-row-numeric);
+  }
+
+  .track-item:hover .track-item__bpm,
+  .track-item.row-selected .track-item__bpm {
+    color: var(--color-track-row-numeric);
+  }
+
+  .track-item:hover .track-item__bpm-unit,
+  .track-item.row-selected .track-item__bpm-unit {
+    color: var(--color-track-row-numeric);
+  }
+
+  .track-item:hover .track-item__bpm--empty,
+  .track-item.row-selected .track-item__bpm--empty {
+    color: var(--color-track-row-numeric);
+  }
+
+  /* Dance tags — right side of meta strip, never bleed into title */
+  .track-item__dances {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .dance-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--dance-color) 15%, transparent);
+    color: var(--dance-color);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dance-tag--btn {
+    font-family: inherit;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out);
+  }
+
+  .dance-tag--btn:hover {
+    filter: brightness(1.12);
+  }
+
+  .dance-tag--btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .dance-tag--none {
+    --dance-color: #c8c8c8;
+    background: rgba(255, 255, 255, 0.14);
+    color: #e8e8e8;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .dance-tag--none:hover {
+    background: rgba(255, 255, 255, 0.2);
+    filter: none;
+  }
+
+  .dance-tag--more {
+    --dance-color: var(--color-text-muted);
+    background: var(--color-bg-overlay);
+    color: var(--color-text-muted);
+  }
+
+  /* BPM */
+  .track-item__bpm {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+    justify-content: flex-start;
+  }
+
+  .track-item__bpm--empty {
+    color: var(--color-text-muted);
+  }
+
+  .track-item__bpm-unit {
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  /* Duration — centered under clock column header */
+  .track-item__duration {
+    justify-self: stretch;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* Actions — narrow column, hug right edge of row */
+  .track-item__actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .track-item:hover .track-item__actions,
+  .track-item.row-selected .track-item__actions {
+    opacity: 1;
+  }
+
+  .track-item__action-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    transition: color var(--duration-fast), background var(--duration-fast);
+  }
+
+  .track-item__action-btn:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-overlay);
+  }
+</style>

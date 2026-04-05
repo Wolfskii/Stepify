@@ -1,0 +1,82 @@
+/**
+ * Typed IPC channel registry.
+ *
+ * All IPC communication between the main and renderer processes must use
+ * these channel constants. This ensures compile-time safety and avoids
+ * string typos scattered across the codebase.
+ */
+
+// ─── Library Channels ─────────────────────────────────────────────────────────
+
+export const IPC_LIBRARY = {
+  /** Add a local directory to the music library */
+  ADD_DIRECTORY: 'library:add-directory',
+  /** Remove a directory from the library and all tracks whose files lived under it */
+  REMOVE_DIRECTORY: 'library:remove-directory',
+  /** Remove a single local track from the library store */
+  REMOVE_TRACK: 'library:remove-track',
+  /** Get all known library directories */
+  GET_DIRECTORIES: 'library:get-directories',
+  /** Get all tracks (optionally filtered by dance) */
+  GET_TRACKS: 'library:get-tracks',
+  /** Assign a track to one or more dance categories */
+  ASSIGN_DANCE: 'library:assign-dance',
+  /** Remove a dance assignment from a track */
+  UNASSIGN_DANCE: 'library:unassign-dance',
+  /** Trigger a rescan of all library directories */
+  RESCAN: 'library:rescan',
+  /** Emitted by main when a scan completes */
+  SCAN_COMPLETE: 'library:scan-complete',
+  /** Emitted by main during scanning with progress */
+  SCAN_PROGRESS: 'library:scan-progress',
+  /**
+   * Write detected BPM into the audio file tags and persist on the library track.
+   * Used when no BPM was present in metadata and analysis produced a value.
+   */
+  SAVE_DETECTED_BPM: 'library:save-detected-bpm',
+  /** Persist BPM on library track only (no file write), e.g. when format cannot embed TBPM */
+  SET_TRACK_BPM: 'library:set-track-bpm',
+} as const
+
+// ─── Audio Channels ───────────────────────────────────────────────────────────
+
+export const IPC_AUDIO = {
+  /** Read a local audio file and return an ArrayBuffer for the renderer */
+  READ_FILE: 'audio:read-file',
+  /** Get metadata (BPM, duration, etc.) for a file */
+  GET_METADATA: 'audio:get-metadata',
+} as const
+
+// ─── Spotify Channels ─────────────────────────────────────────────────────────
+
+export const IPC_SPOTIFY = {
+  /** Start the OAuth PKCE login flow (opens browser) */
+  LOGIN: 'spotify:login',
+  /** Called by the main process after redirect callback is captured */
+  LOGIN_COMPLETE: 'spotify:login-complete',
+  /** Log out and clear tokens */
+  LOGOUT: 'spotify:logout',
+  /** Check if user is currently authenticated */
+  GET_AUTH_STATUS: 'spotify:get-auth-status',
+  /** Search Spotify tracks */
+  SEARCH: 'spotify:search',
+  /** Get a Spotify access token (refreshed if needed) */
+  GET_TOKEN: 'spotify:get-token',
+} as const
+
+// ─── Settings Channels ────────────────────────────────────────────────────────
+
+export const IPC_SETTINGS = {
+  GET: 'settings:get',
+  SET: 'settings:set',
+  RESET: 'settings:reset',
+} as const
+
+// ─── Window Channels ──────────────────────────────────────────────────────────
+
+export const IPC_WINDOW = {
+  MINIMIZE: 'window:minimize',
+  MAXIMIZE: 'window:maximize',
+  CLOSE: 'window:close',
+  TOGGLE_FULLSCREEN: 'window:toggle-fullscreen',
+} as const
