@@ -19,6 +19,7 @@ const initialState: PlaybackState = {
   shuffle: false,
   repeatMode: 'off',
   playbackListDanceId: null,
+  playbackListFolderPath: null,
 }
 
 export const playerState = writable<PlaybackState>(initialState)
@@ -129,7 +130,12 @@ export const playerActions = {
     playerState.update((s) => ({ ...s, muted: !s.muted }))
   },
 
-  setQueue(tracks: Track[], startIndex = 0, listDanceId: DanceId | null = null) {
+  setQueue(
+    tracks: Track[],
+    startIndex = 0,
+    listDanceId: DanceId | null = null,
+    listFolderPath: string | null = null,
+  ) {
     const t = tracks[startIndex] ?? null
     playerState.update((s) => ({
       ...s,
@@ -137,7 +143,8 @@ export const playerActions = {
       queueIndex: startIndex,
       track: t,
       sourceDuration: t && t.duration > 0 ? t.duration : 0,
-      playbackListDanceId: listDanceId,
+      playbackListDanceId: listFolderPath ? null : listDanceId,
+      playbackListFolderPath: listFolderPath,
     }))
   },
 
@@ -308,6 +315,7 @@ export const playerActions = {
           currentTime: 0,
           sourceDuration: 0,
           playbackListDanceId: null,
+          playbackListFolderPath: null,
           muted: false,
         }
       }

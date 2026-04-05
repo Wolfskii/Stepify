@@ -4,14 +4,17 @@ import { get } from 'svelte/store'
 import {
   filteredTracks,
   selectedDanceId,
+  selectedFolderPath,
+  libraryDirectories,
   isScanning,
   libraryActions,
   selectedTrackIds,
 } from '../../stores/library.store'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import TrackItem from './TrackItem.svelte'
-import { activeModal } from '../../stores/ui.store'
+import { activeModal, uiActions } from '../../stores/ui.store'
 import { pathsFromFileDrop } from '../../utils/dropPaths'
+import { folderBadgeColor } from '../../utils/folderBadgeColor'
 
 onMount(() => {
   const onKey = (e: KeyboardEvent) => {
@@ -33,9 +36,32 @@ onMount(() => {
   return () => window.removeEventListener('keydown', onKey)
 })
 
+function folderBasename(fullPath: string): string {
+  const s = fullPath.replace(/[/\\]+$/, '')
+  const i = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'))
+  return i >= 0 ? s.slice(i + 1) : s
+}
+
+function normalizePathLoose(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase()
+}
+
 $: selectedDance = $selectedDanceId ? DANCE_CATEGORIES_BY_ID[$selectedDanceId] : null
-$: headingText = selectedDance ? selectedDance.name : 'All Tracks'
+$: headingText = selectedDance
+  ? selectedDance.name
+  : $selectedFolderPath
+    ? folderBasename($selectedFolderPath)
+    : 'All Tracks'
 $: bpmLabel = selectedDance ? `${selectedDance.bpmRange[0]}–${selectedDance.bpmRange[1]} BPM` : ''
+$: selectedFolderDir = $selectedFolderPath
+  ? $libraryDirectories.find(
+      (d) => normalizePathLoose(d.path) === normalizePathLoose($selectedFolderPath),
+    )
+  : undefined
+$: folderDefaultDance = selectedFolderDir?.defaultDanceId
+  ? DANCE_CATEGORIES_BY_ID[selectedFolderDir.defaultDanceId]
+  : null
+$: folderViewBadgeAccent = folderBadgeColor(selectedFolderDir?.defaultDanceId)
 function addDirectory() {
   void libraryActions.pickAddMusicFolder()
 }
@@ -98,6 +124,18 @@ function onTrackListBackgroundClick(e: MouseEvent) {
           class="track-list__dance-dot"
           style="background: {selectedDance.color}"
         ></span>
+      {:else if $selectedFolderPath}
+        <span
+          class="track-list__folder-icon"
+          style="--folder-icon-accent: {folderViewBadgeAccent}"
+          aria-hidden="true"
+        >
+          <svg class="track-list__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
+            />
+          </svg>
+        </span>
       {/if}
       <h1 class="track-list__title">{headingText}</h1>
       {#if bpmLabel}
@@ -105,10 +143,23 @@ function onTrackListBackgroundClick(e: MouseEvent) {
       {/if}
     </div>
 
-    <div class="track-list__meta">
-      {$filteredTracks.length}
-      {$filteredTracks.length === 1 ? 'track' : 'tracks'}
-    </div>
+    {#if $selectedFolderPath}
+      <div class="track-list__folder-actions">
+        <button
+          type="button"
+          class="track-list__folder-dance-btn"
+          title="Tags tracks in this folder that have no dance yet, and new files added here. Click to change."
+          on:click={() =>
+            uiActions.openModal('assign-folder-dance', { folderSettingsPath: $selectedFolderPath })}
+        >
+          {#if folderDefaultDance}
+            Default dance for folder: <strong>{folderDefaultDance.name}</strong>
+          {:else}
+            Set default dance for folder
+          {/if}
+        </button>
+      </div>
+    {/if}
   </header>
 
   <!-- Column labels -->
@@ -170,6 +221,12 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             <strong>−</strong> or <strong>Delete</strong> / <strong>Backspace</strong> to remove from this
             dance only.
           </p>
+        {:else if $selectedFolderPath}
+          <p>No tracks in this folder yet.</p>
+          <p class="track-list__hint">
+            Add audio files under this folder on disk, then rescan (or the app may pick them up
+            automatically). Spotify tracks are not tied to library folders.
+          </p>
         {:else}
           <p>Your library is empty.</p>
           <p class="track-list__hint">Drag a music folder here, or:</p>
@@ -180,7 +237,13 @@ function onTrackListBackgroundClick(e: MouseEvent) {
       </div>
     {:else}
       {#each $filteredTracks as track, i (track.id)}
-        <TrackItem {track} index={i} queue={$filteredTracks} filterDanceId={$selectedDanceId} />
+        <TrackItem
+          {track}
+          index={i}
+          queue={$filteredTracks}
+          filterDanceId={$selectedDanceId}
+          filterFolderPath={$selectedFolderPath}
+        />
       {/each}
     {/if}
   </div>
@@ -238,9 +301,53 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     align-self: center;
   }
 
-  .track-list__meta {
+  .track-list__folder-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--folder-icon-accent);
+    opacity: 0.95;
+  }
+
+  .track-list__folder-icon__svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+  }
+
+  .track-list__folder-actions {
+    margin-top: var(--space-3);
+  }
+
+  .track-list__folder-dance-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
     font-size: 12px;
-    color: var(--color-text-muted);
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .track-list__folder-dance-btn:hover {
+    background: var(--color-bg-overlay);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+  }
+
+  .track-list__folder-dance-btn strong {
+    font-weight: 700;
+    color: var(--color-text-primary);
   }
 
   /*

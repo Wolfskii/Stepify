@@ -137,10 +137,15 @@ export interface PlaybackState {
   repeatMode: RepeatMode
   /**
    * Sidebar dance filter when the queue was started from the track list.
-   * `null` = All Tracks. Row “now playing” styling is shown only when this
-   * matches the current list’s filter (see TrackList `selectedDanceId`).
+   * `null` = not started from a dance-only list. Row “now playing” styling matches
+   * when this aligns with the active list filter (`selectedDanceId` / folder view).
    */
   playbackListDanceId: DanceId | null
+  /**
+   * Library folder path when the queue was started from a folder-scoped list.
+   * `null` = All Tracks or a dance filter. Mutually exclusive with `playbackListDanceId`.
+   */
+  playbackListFolderPath: string | null
 }
 
 export interface TempoState {

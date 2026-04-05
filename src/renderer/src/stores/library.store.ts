@@ -25,6 +25,8 @@ interface LibraryState {
   isScanning: boolean
   scanProgress: { current: number; total: number } | null
   selectedDanceId: DanceId | null
+  /** Library root path when browsing tracks from one folder (mutually exclusive with dance filter). */
+  selectedFolderPath: string | null
   searchQuery: string
   /** Multi-select in the track list (Ctrl/Cmd/Shift + click) */
   selectedTrackIds: string[]
@@ -38,6 +40,7 @@ const initialState: LibraryState = {
   isScanning: false,
   scanProgress: null,
   selectedDanceId: null,
+  selectedFolderPath: null,
   searchQuery: '',
   selectedTrackIds: [],
   selectionAnchorIndex: null,
@@ -51,6 +54,15 @@ export const allTracks = derived(libraryState, ($s) => $s.tracks)
 
 export const filteredTracks = derived(libraryState, ($s) => {
   let tracks = $s.tracks
+
+  const folderPath = $s.selectedFolderPath
+  if (folderPath) {
+    tracks = tracks.filter(
+      (t) =>
+        t.source === 'local' &&
+        Boolean(t.localPath && trackFileUnderLibraryFolder(t.localPath, folderPath)),
+    )
+  }
 
   const danceId = $s.selectedDanceId
   if (danceId) {
@@ -71,6 +83,7 @@ export const filteredTracks = derived(libraryState, ($s) => {
 })
 
 export const selectedDanceId = derived(libraryState, ($s) => $s.selectedDanceId)
+export const selectedFolderPath = derived(libraryState, ($s) => $s.selectedFolderPath)
 export const isScanning = derived(libraryState, ($s) => $s.isScanning)
 export const scanProgress = derived(libraryState, ($s) => $s.scanProgress)
 
@@ -212,6 +225,12 @@ export const libraryActions = {
     }
     const ids = r.data.removedTrackIds
     libraryActions.removeTracksFromState(ids)
+    libraryState.update((s) => {
+      if (!s.selectedFolderPath) return s
+      const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
+      if (norm(s.selectedFolderPath).toLowerCase() !== norm(path).toLowerCase()) return s
+      return { ...s, selectedFolderPath: null }
+    })
     await libraryActions.refreshLibraryDirectories()
     uiActions.notify('Folder removed from library', 'success')
     return ids
@@ -274,7 +293,7 @@ export const libraryActions = {
 
   selectDance(danceId: DanceId | null) {
     libraryState.update((s) => {
-      if (s.selectedDanceId === danceId) {
+      if (danceId !== null && s.selectedDanceId === danceId) {
         return {
           ...s,
           selectedTrackIds: [],
@@ -284,6 +303,33 @@ export const libraryActions = {
       return {
         ...s,
         selectedDanceId: danceId,
+        selectedFolderPath: null,
+        selectedTrackIds: [],
+        selectionAnchorIndex: null,
+      }
+    })
+  },
+
+  /** Browse tracks under one library root (same as All Tracks columns, including Dance). */
+  selectFolder(path: string | null) {
+    libraryState.update((s) => {
+      const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
+      const same =
+        path != null &&
+        s.selectedFolderPath != null &&
+        norm(path).toLowerCase() === norm(s.selectedFolderPath).toLowerCase()
+      if (same) {
+        return {
+          ...s,
+          selectedFolderPath: null,
+          selectedTrackIds: [],
+          selectionAnchorIndex: null,
+        }
+      }
+      return {
+        ...s,
+        selectedFolderPath: path,
+        selectedDanceId: null,
         selectedTrackIds: [],
         selectionAnchorIndex: null,
       }
@@ -338,14 +384,19 @@ export const libraryActions = {
       return
     }
     await libraryActions.refreshLibraryDirectories()
-    const ids = get(libraryState)
-      .tracks.filter((t) => t.localPath && trackFileUnderLibraryFolder(t.localPath, path))
-      .map((t) => t.id)
+    const inFolder = get(libraryState).tracks.filter(
+      (t) => t.localPath && trackFileUnderLibraryFolder(t.localPath, path),
+    )
+    const ids = inFolder.filter((t) => t.dances.length === 0).map((t) => t.id)
     if (ids.length > 0) {
       await libraryActions.assignDanceToTracks(ids, danceId)
     } else {
       const name = DANCE_CATEGORIES_BY_ID[danceId]?.name ?? danceId
-      uiActions.notify(`New files in this folder will use “${name}”.`, 'success')
+      const msg =
+        inFolder.length === 0
+          ? `Folder default is “${name}”. It will apply when you add tracks to this folder.`
+          : `Folder default is “${name}”. Every track here already has a dance; new files will use this default.`
+      uiActions.notify(msg, 'info')
     }
   },
 

@@ -1,5 +1,10 @@
 <script lang="ts">
-import { activeModal, folderAssignTrackIds, folderDanceSettingsPath, uiActions } from '../../stores/ui.store'
+import {
+  activeModal,
+  folderAssignTrackIds,
+  folderDanceSettingsPath,
+  uiActions,
+} from '../../stores/ui.store'
 import { libraryActions, libraryDirectories } from '../../stores/library.store'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import { orderedDanceCategories } from '../../stores/danceOrder.store'
@@ -11,9 +16,7 @@ $: currentDefaultId =
   folderPath != null
     ? $libraryDirectories.find((d) => d.path === folderPath)?.defaultDanceId
     : undefined
-$: currentDefaultName = currentDefaultId
-  ? DANCE_CATEGORIES_BY_ID[currentDefaultId]?.name
-  : null
+$: currentDefaultName = currentDefaultId ? DANCE_CATEGORIES_BY_ID[currentDefaultId]?.name : null
 
 async function assignAll(danceId: DanceId) {
   if (isFolderSettings && folderPath) {
@@ -60,13 +63,15 @@ function skip() {
       {#if isFolderSettings}
         <h2 id="folder-assign-title" class="modal__title">Folder dance</h2>
         <p class="modal__hint">
-          Choose a dance for this folder. New files discovered here will get that tag automatically. Applying
-          also updates every track already in this folder.
+          Choose a dance for this folder. It is applied to every track here that does not have a dance yet,
+          and to new files when they are added or discovered.
         </p>
         {#if currentDefaultName}
           <p class="modal__current">Current default: <strong>{currentDefaultName}</strong></p>
         {:else}
-          <p class="modal__current modal__current--muted">No default — new files stay untagged until you assign.</p>
+          <p class="modal__current modal__current--muted">
+            No default — tracks without a dance stay untagged until you set one.
+          </p>
         {/if}
         <div class="modal__grid">
           {#each $orderedDanceCategories as d}

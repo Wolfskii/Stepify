@@ -1,6 +1,5 @@
 <script lang="ts">
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
-import type { LibraryDirectory } from '@shared/types'
 import DanceCategoryItem from './DanceCategoryItem.svelte'
 import { latinOrder, standardOrder } from '../../stores/danceOrder.store'
 import SearchBar from './SearchBar.svelte'
@@ -11,16 +10,20 @@ import {
   scanProgress,
   libraryDirectories,
   selectedDanceId,
+  selectedFolderPath,
 } from '../../stores/library.store'
-import { activePanel, uiActions } from '../../stores/ui.store'
+import { uiActions } from '../../stores/ui.store'
 import { currentTrack, playerActions, playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { audioEngine } from '../../services/audioEngine'
+import { folderBadgeColor } from '../../utils/folderBadgeColor'
 
 $: latinDances = $latinOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
 $: standardDances = $standardOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
 $: allTracksIsPlaybackSource =
-  $playerState.track != null && $playerState.playbackListDanceId === null
+  $playerState.track != null &&
+  $playerState.playbackListDanceId === null &&
+  $playerState.playbackListFolderPath == null
 
 function folderLabel(fullPath: string): string {
   const s = fullPath.replace(/[/\\]+$/, '')
@@ -28,13 +31,10 @@ function folderLabel(fullPath: string): string {
   return i >= 0 ? s.slice(i + 1) : s
 }
 
-function folderRowTitle(dir: LibraryDirectory): string {
-  const pathLine = dir.path
-  if (dir.defaultDanceId) {
-    const n = DANCE_CATEGORIES_BY_ID[dir.defaultDanceId]?.name ?? dir.defaultDanceId
-    return `${pathLine}\nDefault for new files: ${n}. Click to change.`
-  }
-  return `${pathLine}\nClick to set a default dance for new files in this folder.`
+function pathsMatchSidebar(a: string, b: string): boolean {
+  const norm = (p: string) =>
+    p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase()
+  return norm(a) === norm(b)
 }
 
 async function removeFolder(path: string, label: string) {
@@ -59,6 +59,9 @@ function showAllTracks() {
   libraryActions.selectDance(null)
   libraryActions.setSearchQuery('')
 }
+
+/** Folders block starts collapsed; chevron toggles list visibility. */
+let foldersSectionOpen = false
 </script>
 
 <nav class="sidebar">
@@ -71,7 +74,7 @@ function showAllTracks() {
     <button
       type="button"
       class="sidebar__nav-item"
-      class:sidebar__nav-item--active={$selectedDanceId === null}
+      class:sidebar__nav-item--active={$selectedDanceId === null && $selectedFolderPath === null}
       class:sidebar__nav-item--queue-source={allTracksIsPlaybackSource}
       title={allTracksIsPlaybackSource ? 'All Tracks — playback from this list' : undefined}
       on:click={showAllTracks}
@@ -110,37 +113,87 @@ function showAllTracks() {
   <!-- Library folders -->
   {#if $libraryDirectories.length > 0}
     <div class="sidebar__group">
-      <div class="sidebar__group-label">Folders</div>
-      {#each $libraryDirectories as dir}
-        <div class="sidebar__folder-row">
-          <button
-            type="button"
-            class="sidebar__folder-name truncate"
-            title={folderRowTitle(dir)}
-            on:click={() =>
-              uiActions.openModal('assign-folder-dance', { folderSettingsPath: dir.path })}
-          >
-            {folderLabel(dir.path)}
-          </button>
-          <span class="sidebar__folder-count">{dir.trackCount}</span>
-          <button
-            type="button"
-            class="sidebar__folder-remove"
-            title="Remove folder from library"
-            aria-label="Remove {folderLabel(dir.path)} from library"
-            on:click={() => removeFolder(dir.path, folderLabel(dir.path))}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M4 4l8 8M12 4l-8 8"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-      {/each}
+      <button
+        type="button"
+        class="sidebar__group-label sidebar__group-label--folders-toggle"
+        aria-expanded={foldersSectionOpen}
+        aria-controls="sidebar-folders-list"
+        on:click={() => (foldersSectionOpen = !foldersSectionOpen)}
+      >
+        <span>Folders</span>
+        <svg
+          class="sidebar__folders-chevron"
+          class:sidebar__folders-chevron--open={foldersSectionOpen}
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <div
+        id="sidebar-folders-list"
+        class="sidebar__folders-list"
+        class:sidebar__folders-list--collapsed={!foldersSectionOpen}
+      >
+        {#each $libraryDirectories as dir}
+          <div class="sidebar__folder-row">
+            <button
+              type="button"
+              class="sidebar__folder-item"
+              class:sidebar__folder-item--active={$selectedFolderPath != null &&
+                pathsMatchSidebar($selectedFolderPath, dir.path)}
+              class:sidebar__folder-item--queue-source={$playerState.track != null &&
+                $playerState.playbackListFolderPath != null &&
+                pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
+              title={dir.path}
+              on:click={() => libraryActions.selectFolder(dir.path)}
+            >
+              <span
+                class="sidebar__folder-icon"
+                style="--folder-icon-accent: {folderBadgeColor(dir.defaultDanceId)}"
+                aria-hidden="true"
+              >
+                <svg class="sidebar__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
+                  />
+                </svg>
+              </span>
+              <span class="sidebar__folder-item__label truncate">{folderLabel(dir.path)}</span>
+              {#if $playerState.track != null &&
+                $playerState.playbackListFolderPath != null &&
+                pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
+                <SidebarPlaybackIndicator />
+              {/if}
+            </button>
+            <button
+              type="button"
+              class="sidebar__folder-remove"
+              title="Remove folder from library"
+              aria-label="Remove {folderLabel(dir.path)} from library"
+              on:click|stopPropagation={() => removeFolder(dir.path, folderLabel(dir.path))}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M4 4l8 8M12 4l-8 8"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -264,46 +317,118 @@ function showAllTracks() {
     margin-bottom: var(--space-1);
   }
 
-  .sidebar__folder-row {
+  .sidebar__group-label--folders-toggle {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-2);
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
-    border-radius: var(--radius-md);
-    font-size: 12px;
-    color: var(--color-text-secondary);
-  }
-
-  .sidebar__folder-row:hover {
-    background: var(--color-bg-elevated);
-  }
-
-  .sidebar__folder-name {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
+    margin-bottom: var(--space-1);
     border: none;
     background: none;
-    padding: 0;
-    margin: 0;
-    font: inherit;
-    color: inherit;
+    font-family: inherit;
     text-align: left;
     cursor: pointer;
     border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
   }
 
-  .sidebar__folder-name:hover {
+  .sidebar__group-label--folders-toggle:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+  }
+
+  .sidebar__group-label--folders-toggle:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sidebar__folders-chevron {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    transform: rotate(-90deg);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .sidebar__folders-chevron--open {
+    transform: rotate(0deg);
+  }
+
+  .sidebar__group-label--folders-toggle:hover .sidebar__folders-chevron {
+    color: var(--color-text-secondary);
+  }
+
+  .sidebar__folders-list--collapsed {
+    display: none;
+  }
+
+  .sidebar__folder-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-1);
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sidebar__folder-item {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .sidebar__folder-item:hover {
+    background: var(--color-bg-elevated);
     color: var(--color-text-primary);
   }
 
-  .sidebar__folder-count {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    background: var(--color-bg-overlay);
-    padding: 1px 6px;
-    border-radius: var(--radius-full);
+  .sidebar__folder-item--active {
+    background: var(--color-accent-muted);
+    color: var(--color-accent);
+  }
+
+  .sidebar__folder-item--queue-source:not(.sidebar__folder-item--active) .sidebar__folder-item__label {
+    color: var(--color-accent);
+  }
+
+  .sidebar__folder-icon {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--folder-icon-accent);
+    opacity: 0.92;
+  }
+
+  .sidebar__folder-item--active .sidebar__folder-icon {
+    opacity: 1;
+  }
+
+  .sidebar__folder-icon__svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+  }
+
+  .sidebar__folder-item__label {
+    flex: 1;
+    min-width: 0;
   }
 
   .sidebar__folder-remove {

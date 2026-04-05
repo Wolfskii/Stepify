@@ -13,10 +13,28 @@ export let index: number
 export let queue: Track[]
 /** When set (dance filter view), show remove-from-this-dance control */
 export let filterDanceId: DanceId | null = null
+/** When set (folder filter view), scope “now playing” row to that list */
+export let filterFolderPath: string | null = null
 
 $: isCurrent = $currentTrack?.id === track.id
 /** “Now playing” row treatment only in the list where playback was started */
-$: listContextMatches = $playerState.playbackListDanceId === filterDanceId
+$: listContextMatches =
+  (filterDanceId != null &&
+    $playerState.playbackListDanceId === filterDanceId &&
+    $playerState.playbackListFolderPath == null) ||
+  (filterDanceId == null &&
+    filterFolderPath != null &&
+    $playerState.playbackListFolderPath != null &&
+    normalizePathKey($playerState.playbackListFolderPath) === normalizePathKey(filterFolderPath) &&
+    $playerState.playbackListDanceId == null) ||
+  (filterDanceId == null &&
+    filterFolderPath == null &&
+    $playerState.playbackListDanceId == null &&
+    $playerState.playbackListFolderPath == null)
+
+function normalizePathKey(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase()
+}
 $: showAsPlayingRow = isCurrent && listContextMatches
 $: isCurrentlyPlaying = showAsPlayingRow && $isPlaying
 $: isRowSelected = $selectedTrackIds.includes(track.id)
@@ -28,7 +46,7 @@ function formatDuration(seconds: number): string {
 }
 
 async function play() {
-  playerActions.setQueue(queue, index, filterDanceId)
+  playerActions.setQueue(queue, index, filterDanceId, filterFolderPath)
   await audioEngine.load(track)
   // List play always starts from the beginning; load() may noop if already buffered.
   audioEngine.seek(0)
