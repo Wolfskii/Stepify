@@ -46,6 +46,8 @@ export const IPC_LIBRARY = {
   SEARCH_TRACK_METADATA: 'library:search-track-metadata',
   /** Apply title/artist/album/cover to a track (and embed tags for MP3/FLAC when possible) */
   UPDATE_TRACK_METADATA: 'library:update-track-metadata',
+  /** Open a registered library root in the system file manager (Explorer / Finder / etc.) */
+  OPEN_LIBRARY_FOLDER: 'library:open-library-folder',
 } as const
 
 // ─── Audio Channels ───────────────────────────────────────────────────────────

@@ -66,6 +66,13 @@ function addDirectory() {
   void libraryActions.pickAddMusicFolder()
 }
 
+async function openLibraryFolderOnDisk(absPath: string) {
+  const r = await window.electronAPI.library.openLibraryFolder(absPath)
+  if (!r.success) {
+    uiActions.notify(r.error ?? 'Could not open folder', 'error')
+  }
+}
+
 let dragDepth = 0
 let dragOver = false
 
@@ -119,27 +126,55 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   <!-- Header -->
   <header class="track-list__header">
     <div class="track-list__title-row">
-      {#if selectedDance}
-        <span
-          class="track-list__dance-dot"
-          style="background: {selectedDance.color}"
-        ></span>
-      {:else if $selectedFolderPath}
-        <span
-          class="track-list__folder-icon"
-          style="--folder-icon-accent: {folderViewBadgeAccent}"
-          aria-hidden="true"
+      <div class="track-list__title-lead">
+        {#if selectedDance}
+          <span
+            class="track-list__dance-dot"
+            style="background: {selectedDance.color}"
+          ></span>
+        {:else if $selectedFolderPath}
+          <span
+            class="track-list__folder-icon"
+            style="--folder-icon-accent: {folderViewBadgeAccent}"
+            aria-hidden="true"
+          >
+            <svg class="track-list__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
+              />
+            </svg>
+          </span>
+        {/if}
+        <h1 class="track-list__title">{headingText}</h1>
+        {#if bpmLabel}
+          <span class="track-list__bpm-badge">{bpmLabel}</span>
+        {/if}
+      </div>
+      {#if $selectedFolderPath}
+        <button
+          type="button"
+          class="track-list__open-folder-btn"
+          title="Open this folder in File Explorer / Finder"
+          aria-label="Open folder in file explorer"
+          on:click|stopPropagation={() => openLibraryFolderOnDisk($selectedFolderPath)}
         >
-          <svg class="track-list__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
-              d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
+              d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M15 3h6v6M10 14L21 3"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
             />
           </svg>
-        </span>
-      {/if}
-      <h1 class="track-list__title">{headingText}</h1>
-      {#if bpmLabel}
-        <span class="track-list__bpm-badge">{bpmLabel}</span>
+        </button>
       {/if}
     </div>
 
@@ -274,8 +309,47 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   .track-list__title-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-3);
     margin-bottom: var(--space-1);
+    min-width: 0;
+  }
+
+  .track-list__title-lead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    flex: 1;
+  }
+
+  .track-list__open-folder-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: -6px -4px -6px 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .track-list__open-folder-btn:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+  }
+
+  .track-list__open-folder-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .track-list__dance-dot {

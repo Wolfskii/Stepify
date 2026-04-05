@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import { type BrowserWindow, dialog, ipcMain } from 'electron'
+import { type BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { IPC_LIBRARY } from '../../shared/ipc-channels'
 import type {
   AddLibraryPathsResult,
@@ -270,6 +270,28 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
         return { success: false, error: r.error ?? 'Update failed' }
       }
       return { success: true, data: r.track }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_LIBRARY.OPEN_LIBRARY_FOLDER,
+    async (_event, dirPath: string): Promise<IpcResponse<void>> => {
+      const trimmed = dirPath?.trim()
+      if (!trimmed) return { success: false, error: 'No folder path' }
+      const resolved = path.resolve(trimmed)
+      const known = settingsService
+        .getLibraryDirectories()
+        .some((d) => normalizeLibraryDirKey(d.path) === normalizeLibraryDirKey(resolved))
+      if (!known) return { success: false, error: 'Not a registered library folder' }
+      try {
+        const st = await stat(resolved)
+        if (!st.isDirectory()) return { success: false, error: 'Path is not a folder' }
+      } catch {
+        return { success: false, error: 'Folder not found' }
+      }
+      const err = await shell.openPath(resolved)
+      if (err) return { success: false, error: err }
+      return { success: true }
     },
   )
 

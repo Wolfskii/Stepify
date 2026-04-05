@@ -79,6 +79,9 @@ const api = {
     updateTrackMetadata: (payload: UpdateTrackMetadataPayload): Promise<IpcResponse<Track>> =>
       ipcRenderer.invoke(IPC_LIBRARY.UPDATE_TRACK_METADATA, payload),
 
+    openLibraryFolder: (dirPath: string): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.OPEN_LIBRARY_FOLDER, dirPath),
+
     onScanComplete: (callback: (payload: LibraryDiskSyncPayload) => void) => {
       ipcRenderer.on(IPC_LIBRARY.SCAN_COMPLETE, (_event, payload) => callback(payload))
     },
