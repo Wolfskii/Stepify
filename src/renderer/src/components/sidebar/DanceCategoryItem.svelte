@@ -15,8 +15,7 @@ let reorderHover = false
 
 $: isSelected = $selectedDanceId === dance.id
 $: reorderMime = reorderMimeForStyle(dance.style)
-$: isPlaybackSource =
-  $playerState.track != null && $playerState.playbackListDanceId === dance.id
+$: isPlaybackSource = $playerState.track != null && $playerState.playbackListDanceId === dance.id
 $: danceRowTitle =
   `${dance.name} — ${dance.bpmRange[0]}–${dance.bpmRange[1]} BPM — click to filter, drag row to reorder (${dance.style === 'latin' ? 'Latin' : 'Standard'} only), drop tracks here` +
   (isPlaybackSource ? ' — playback from this list' : '')
