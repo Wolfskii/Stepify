@@ -22,9 +22,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# Environment
+# Environment (keep example.env committed as the template)
 .env
 .env.local
+.env.*.local
 
 # electron-store data (dev)
 app-data/
