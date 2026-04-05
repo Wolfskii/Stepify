@@ -90,14 +90,83 @@ function hitDedupKey(h: MetadataSearchHit): string {
   return `${normKeyPart(h.artist)}|${normKeyPart(h.title)}`
 }
 
-function mergeDeduped(
-  primary: MetadataSearchHit[],
-  secondary: MetadataSearchHit[],
+/** Lowercase, strip accents, keep letters/digits for fuzzy matching. */
+function normalizeForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9\s]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Higher = closer to the user’s search string (Apple + Spotify hits ranked together). */
+function relevanceScore(query: string, hit: MetadataSearchHit): number {
+  const q = normalizeForMatch(query)
+  if (!q) return 0
+
+  const title = normalizeForMatch(hit.title)
+  const artist = normalizeForMatch(hit.artist)
+  const album = normalizeForMatch(hit.album ?? '')
+  const artistTitle = `${artist} ${title}`.replace(/\s+/g, ' ').trim()
+  const combined = `${artistTitle} ${album}`.replace(/\s+/g, ' ').trim()
+  const qTokens = q.split(' ').filter((t) => t.length > 0)
+  const meaningful = qTokens.filter((t) => t.length >= 2)
+
+  let score = 0
+
+  if (combined === q) score += 10_000
+  if (artistTitle === q) score += 9_500
+  if (title === q) score += 9_000
+
+  if (q.length >= 3 && combined.includes(q)) score += 2_200
+  if (q.length >= 3 && title.includes(q)) score += 2_000
+  if (q.length >= 3 && artistTitle.includes(q)) score += 1_800
+
+  if (combined.includes(q)) score += 1_200
+  if (q.includes(combined) && combined.length >= 4) score += 800
+
+  if (
+    meaningful.length > 0 &&
+    meaningful.every((t) => combined.includes(t))
+  ) {
+    score += 500 + 40 * meaningful.length
+  }
+
+  for (const t of meaningful) {
+    if (title.includes(t)) score += 140
+    if (artist.includes(t)) score += 110
+    if (album.includes(t)) score += 45
+  }
+
+  const first = meaningful[0] ?? qTokens[0] ?? ''
+  if (first.length >= 2) {
+    if (title.startsWith(first)) score += 350
+    if (artist.startsWith(first)) score += 220
+  }
+
+  return score
+}
+
+function mergeRankedByRelevance(
+  query: string,
+  hits: MetadataSearchHit[],
   max: number,
 ): MetadataSearchHit[] {
+  const scored = hits.map((h) => ({
+    h,
+    score: relevanceScore(query, h),
+    tie: `${normKeyPart(h.artist)}\t${normKeyPart(h.title)}`,
+  }))
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.tie.localeCompare(b.tie)
+  })
+
   const seen = new Set<string>()
   const out: MetadataSearchHit[] = []
-  for (const h of [...primary, ...secondary]) {
+  for (const { h } of scored) {
     const k = hitDedupKey(h)
     if (seen.has(k)) continue
     seen.add(k)
@@ -217,5 +286,5 @@ export async function searchTrackMetadataOnline(query: string): Promise<Metadata
     console.warn('[metadata] Spotify catalog search skipped or failed:', e)
   }
 
-  return mergeDeduped(itunes, spotify, MERGED_RESULT_CAP)
+  return mergeRankedByRelevance(term, [...itunes, ...spotify], MERGED_RESULT_CAP)
 }
