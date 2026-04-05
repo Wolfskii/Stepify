@@ -85,6 +85,7 @@ function openTrackMetadata() {
 $: primaryDanceId = track.dances[0]
 $: filterDanceMeta = filterDanceId ? DANCE_CATEGORIES_BY_ID[filterDanceId] : null
 $: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
+$: popScore = track.popularityScore ?? 0
 
 function onRowClick(e: MouseEvent) {
   const el = e.target as HTMLElement | null
@@ -222,6 +223,58 @@ function onDragStart(e: DragEvent) {
         {/if}
       </div>
     {/if}
+
+    <div
+      class="track-item__popularity"
+      class:track-item__popularity--up={popScore > 0}
+      class:track-item__popularity--down={popScore < 0}
+      class:track-item__popularity--zero={popScore === 0}
+      title="Popularity: likes minus dislikes"
+    >
+      {#if popScore > 0}
+        <span class="track-item__popularity-num">{popScore}</span>
+        <svg
+          class="track-item__popularity-icon"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+          />
+        </svg>
+      {:else if popScore < 0}
+        <span class="track-item__popularity-num">{Math.abs(popScore)}</span>
+        <svg
+          class="track-item__popularity-icon"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"
+          />
+        </svg>
+      {:else}
+        <span class="track-item__popularity-num track-item__popularity-num--zero">0</span>
+        <svg
+          class="track-item__popularity-icon track-item__popularity-icon--neutral"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+          />
+        </svg>
+      {/if}
+    </div>
 
     {#if track.bpm}
       <button
@@ -368,17 +421,17 @@ function onDragStart(e: DragEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    /* Dance · BPM · time — keep tight; actions column fits dance pill or label+tag control */
-    grid-template-columns: minmax(72px, 152px) 76px 52px;
+    /* Dance · Pop. · BPM · time — actions column only in dance-filtered view */
+    grid-template-columns: minmax(72px, 152px) 72px 76px 52px;
     flex-shrink: 0;
     min-width: 0;
     justify-items: start;
     cursor: default;
   }
 
-  /* Single-dance list: no dance column; BPM · time · dance label + tag */
+  /* Single-dance list: Pop. · BPM · time · dance label + tag */
   .track-item__meta--no-dance {
-    grid-template-columns: 76px 52px minmax(108px, 172px);
+    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
   }
 
   .track-item__meta :is(button, .dance-tag--btn) {
@@ -549,6 +602,64 @@ function onDragStart(e: DragEvent) {
   .track-item:hover .track-item__bpm--empty,
   .track-item.row-selected .track-item__bpm--empty {
     color: var(--color-track-row-numeric);
+  }
+
+  .track-item__popularity {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .track-item__popularity-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .track-item__popularity--up {
+    color: #4ade80;
+  }
+
+  .track-item__popularity--up .track-item__popularity-icon {
+    color: #4ade80;
+  }
+
+  .track-item__popularity--down {
+    color: #f87171;
+  }
+
+  .track-item__popularity--down .track-item__popularity-icon {
+    color: #f87171;
+  }
+
+  .track-item__popularity--zero {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .track-item__popularity-num--zero {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .track-item__popularity-icon--neutral {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .track-item:hover .track-item__popularity--zero,
+  .track-item.row-selected .track-item__popularity--zero {
+    color: rgba(255, 255, 255, 0.65);
+  }
+
+  .track-item:hover .track-item__popularity-num--zero,
+  .track-item.row-selected .track-item__popularity-num--zero {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .track-item:hover .track-item__popularity-icon--neutral,
+  .track-item.row-selected .track-item__popularity-icon--neutral {
+    color: rgba(255, 255, 255, 0.55);
   }
 
   /* Dance tags — right side of meta strip, never bleed into title */

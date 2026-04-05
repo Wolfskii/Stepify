@@ -208,6 +208,13 @@ function onTrackListBackgroundClick(e: MouseEvent) {
         {#if !$selectedDanceId}
           <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
         {/if}
+        <div
+          role="columnheader"
+          class="track-list__col track-list__col--popularity"
+          title="Likes minus dislikes for this track"
+        >
+          Pop.
+        </div>
         <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
         <div
           role="columnheader"
@@ -471,14 +478,14 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    grid-template-columns: minmax(72px, 152px) 76px 52px;
+    grid-template-columns: minmax(72px, 152px) 72px 76px 52px;
     flex-shrink: 0;
     min-width: 0;
     justify-items: start;
   }
 
   .track-list__meta-cols--no-dance {
-    grid-template-columns: 76px 52px minmax(108px, 172px);
+    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
   }
 
   .track-list__col {
@@ -495,6 +502,14 @@ function onTrackListBackgroundClick(e: MouseEvent) {
 
   .track-list__col--dance {
     text-align: right;
+  }
+
+  .track-list__col--popularity {
+    justify-self: center;
+    text-align: center;
+    text-transform: none;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
   }
 
   .track-list__col--bpm {
