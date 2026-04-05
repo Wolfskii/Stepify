@@ -31,6 +31,8 @@
   /* Track list # column, column headers, clock icon */
   --color-tracklist-column-label: #d2d2d2;
   --radius-track-row: 6px;
+  /* Fixed dance column so each row’s meta strip width matches (rows use separate grids). */
+  --tracklist-meta-dance-col: 172px;
 
   /* Status */
   --color-success: #22c55e;

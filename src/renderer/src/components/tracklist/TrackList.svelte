@@ -197,70 +197,68 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     {/if}
   </header>
 
-  <!-- Column labels -->
-  {#if $filteredTracks.length > 0}
-    <div class="track-list__cols" role="row" aria-label="Track list columns">
-      <div role="columnheader" class="track-list__col track-list__col--index">#</div>
-      <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
-      <div class="track-list__meta-cols" class:track-list__meta-cols--dance-filter={$selectedDanceId}>
-        <div
-          role="columnheader"
-          class="track-list__col track-list__col--popularity"
-          title="Likes minus dislikes for this track"
-          aria-label="Popularity: likes minus dislikes"
-        >
-          <svg
-            class="track-list__popularity-icon"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
-            />
-          </svg>
-        </div>
-        <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
-        <div
-          role="columnheader"
-          class="track-list__col track-list__col--time"
-          aria-label="Duration"
-        >
-          <svg
-            class="track-list__time-icon"
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.35" />
-            <path
-              d="M8 4.75V8h3.25"
-              stroke="currentColor"
-              stroke-width="1.35"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </div>
-        {#if !$selectedDanceId}
-          <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
-        {:else}
+  <!-- Track rows (+ sticky column labels share scroll width so headers line up with cells when a scrollbar is present) -->
+  <div class="track-list__rows" role="grid" aria-label="Tracks">
+    {#if $filteredTracks.length > 0}
+      <div class="track-list__cols track-list__cols--sticky" role="row" aria-label="Track list columns">
+        <div role="columnheader" class="track-list__col track-list__col--index">#</div>
+        <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
+        <div class="track-list__meta-cols" class:track-list__meta-cols--dance-filter={$selectedDanceId}>
           <div
             role="columnheader"
-            class="track-list__col track-list__col--dance-icon-slot"
-            aria-hidden="true"
-          ></div>
-        {/if}
+            class="track-list__col track-list__col--time"
+            aria-label="Duration"
+          >
+            <svg
+              class="track-list__time-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.35" />
+              <path
+                d="M8 4.75V8h3.25"
+                stroke="currentColor"
+                stroke-width="1.35"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
+          <div
+            role="columnheader"
+            class="track-list__col track-list__col--popularity"
+            title="Likes minus dislikes for this track"
+            aria-label="Popularity: likes minus dislikes"
+          >
+            <svg
+              class="track-list__popularity-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+              />
+            </svg>
+          </div>
+          {#if !$selectedDanceId}
+            <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
+          {:else}
+            <div
+              role="columnheader"
+              class="track-list__col track-list__col--dance-icon-slot"
+              aria-hidden="true"
+            ></div>
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
-
-  <!-- Track rows -->
-  <div class="track-list__rows" role="grid" aria-label="Tracks">
+    {/if}
     {#if $isScanning}
       <div class="track-list__empty">
         <div class="track-list__spinner"></div>
@@ -451,12 +449,13 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   /* Same three-column grid as .track-item: # | title (1fr) | meta */
   .track-list__cols {
     display: grid;
-    grid-template-columns: 36px minmax(320px, 1fr) max-content;
+    grid-template-columns: 36px minmax(280px, 1fr) max-content;
     column-gap: var(--space-4);
     align-items: center;
     width: 100%;
     min-width: 0;
-    padding: var(--space-2) var(--space-4);
+    /* Horizontal inset comes from .track-list__rows only — avoid doubling padding now that the header sits inside the scroll area. */
+    padding: var(--space-2) 0;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -464,6 +463,13 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     color: var(--color-tracklist-column-label);
     border-bottom: 1px solid var(--color-border-subtle);
     flex-shrink: 0;
+  }
+
+  .track-list__cols--sticky {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-bg-surface);
   }
 
   /*
@@ -481,18 +487,22 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     white-space: nowrap;
   }
 
-  /* Pop. · BPM · time · dance (or narrow icon slot in dance-filter view) */
+  /* Time · BPM · Pop. · dance (or narrow icon slot in dance-filter view) */
   .track-list__meta-cols {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
+    grid-template-columns: 52px 76px 72px var(--tracklist-meta-dance-col);
     min-width: 0;
     justify-items: start;
+    /* Shrink-wrap the strip and pin to column 3’s end so we don’t leave dead space right of Dance when another row sets the column width. */
+    width: max-content;
+    max-width: 100%;
+    justify-self: end;
   }
 
   .track-list__meta-cols--dance-filter {
-    grid-template-columns: 72px 76px 52px 36px;
+    grid-template-columns: 52px 76px 72px 36px;
   }
 
   .track-list__col--dance-icon-slot {
@@ -526,6 +536,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     justify-content: center;
     text-transform: none;
     letter-spacing: 0.02em;
+    margin-inline-start: calc(-1 * var(--space-1));
   }
 
   .track-list__popularity-icon {
@@ -537,6 +548,8 @@ function onTrackListBackgroundClick(e: MouseEvent) {
 
   .track-list__col--bpm {
     text-align: left;
+    padding-inline-start: var(--space-3);
+    box-sizing: border-box;
   }
 
   .track-list__col--time {
@@ -562,7 +575,8 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     width: 100%;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Horizontal padding only on rows — matches .track-list__cols so cells line up */
+    scrollbar-gutter: stable;
+    /* Horizontal padding for track rows + sticky column header (header has no extra inline padding). */
     padding: var(--space-2) var(--space-4);
     box-sizing: border-box;
   }

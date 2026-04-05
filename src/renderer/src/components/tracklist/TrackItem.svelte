@@ -197,6 +197,33 @@ function onDragStart(e: DragEvent) {
     class:track-item__meta--dance-filter={filterDanceId}
     role="gridcell"
   >
+    <div class="track-item__duration">
+      {formatDuration(track.duration)}
+    </div>
+
+    {#if track.bpm}
+      <button
+        type="button"
+        class="track-item__bpm track-item__bpm--btn"
+        title="Edit BPM"
+        aria-label="Edit BPM for {track.title}"
+        on:click|stopPropagation={openEditBpm}
+      >
+        <span>{track.bpm}</span>
+        <span class="track-item__bpm-unit">BPM</span>
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="track-item__bpm track-item__bpm--empty track-item__bpm--btn"
+        title="Set BPM"
+        aria-label="Set BPM for {track.title}"
+        on:click|stopPropagation={openEditBpm}
+      >
+        —
+      </button>
+    {/if}
+
     <div
       class="track-item__popularity"
       class:track-item__popularity--up={popScore > 0}
@@ -247,33 +274,6 @@ function onDragStart(e: DragEvent) {
           />
         </svg>
       {/if}
-    </div>
-
-    {#if track.bpm}
-      <button
-        type="button"
-        class="track-item__bpm track-item__bpm--btn"
-        title="Edit BPM"
-        aria-label="Edit BPM for {track.title}"
-        on:click|stopPropagation={openEditBpm}
-      >
-        <span>{track.bpm}</span>
-        <span class="track-item__bpm-unit">BPM</span>
-      </button>
-    {:else}
-      <button
-        type="button"
-        class="track-item__bpm track-item__bpm--empty track-item__bpm--btn"
-        title="Set BPM"
-        aria-label="Set BPM for {track.title}"
-        on:click|stopPropagation={openEditBpm}
-      >
-        —
-      </button>
-    {/if}
-
-    <div class="track-item__duration">
-      {formatDuration(track.duration)}
     </div>
 
     <div class="track-item__actions" class:track-item__actions--dance-filter={filterDanceId}>
@@ -348,7 +348,7 @@ function onDragStart(e: DragEvent) {
    */
   .track-item {
     display: grid;
-    grid-template-columns: 36px minmax(320px, 1fr) max-content;
+    grid-template-columns: 36px minmax(280px, 1fr) max-content;
     column-gap: var(--space-4);
     align-items: center;
     width: 100%;
@@ -425,15 +425,18 @@ function onDragStart(e: DragEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    /* Pop. · BPM · time · dance badge (or narrow icon in dance-filter view) */
-    grid-template-columns: 72px 76px 52px minmax(108px, 172px);
+    /* Time · BPM · Pop. · dance badge (or narrow icon in dance-filter view) */
+    grid-template-columns: 52px 76px 72px var(--tracklist-meta-dance-col);
     min-width: 0;
     justify-items: start;
     cursor: default;
+    width: max-content;
+    max-width: 100%;
+    justify-self: end;
   }
 
   .track-item__meta--dance-filter {
-    grid-template-columns: 72px 76px 52px 36px;
+    grid-template-columns: 52px 76px 72px 36px;
   }
 
   .track-item__meta :is(button) {
@@ -615,6 +618,7 @@ function onDragStart(e: DragEvent) {
     width: 100%;
     font-size: 12px;
     font-weight: 600;
+    margin-inline-start: calc(-1 * var(--space-1));
   }
 
   .track-item__popularity-num {
@@ -690,7 +694,8 @@ function onDragStart(e: DragEvent) {
     background: none;
     cursor: pointer;
     padding: 0;
-    margin: 0;
+    margin-block: 0;
+    margin-inline: var(--space-3) 0;
   }
 
   .track-item__bpm--btn:focus-visible {
@@ -778,6 +783,7 @@ function onDragStart(e: DragEvent) {
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    justify-self: stretch;
     width: 100%;
     min-width: 0;
   }
