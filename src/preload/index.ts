@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import {
   IPC_AUDIO,
   IPC_LIBRARY,
@@ -7,6 +7,7 @@ import {
   IPC_WINDOW,
 } from '../shared/ipc-channels'
 import type {
+  AddLibraryPathsResult,
   AppSettings,
   DanceId,
   IpcResponse,
@@ -24,11 +25,17 @@ import type {
  * direct access to Node.js or Electron APIs.
  */
 const api = {
+  /** Absolute filesystem path for a file/folder the user dropped (Electron). */
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+
   // ─── Library ──────────────────────────────────────────────────────────────
 
   library: {
-    addDirectory: (): Promise<IpcResponse<LibraryDiskSyncPayload>> =>
+    addDirectory: (): Promise<IpcResponse<AddLibraryPathsResult>> =>
       ipcRenderer.invoke(IPC_LIBRARY.ADD_DIRECTORY),
+
+    addDirectoryFromPaths: (paths: string[]): Promise<IpcResponse<AddLibraryPathsResult>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.ADD_DIRECTORY_PATHS, paths),
 
     removeDirectory: (path: string): Promise<IpcResponse<{ removedTrackIds: string[] }>> =>
       ipcRenderer.invoke(IPC_LIBRARY.REMOVE_DIRECTORY, path),

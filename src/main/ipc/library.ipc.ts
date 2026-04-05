@@ -1,6 +1,9 @@
+import path from 'node:path'
+import { stat } from 'node:fs/promises'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC_LIBRARY } from '../../shared/ipc-channels'
 import type {
+  AddLibraryPathsResult,
   DanceId,
   IpcResponse,
   LibraryDirectory,
@@ -15,10 +18,100 @@ import { searchTrackMetadataOnline } from '../services/metadataSearchService'
 import { writeBpmToAudioFile } from '../services/metadataBpmWriter'
 import { settingsService } from '../services/settingsService'
 
+function normalizeLibraryDirKey(dirPath: string): string {
+  const resolved = path.resolve(dirPath)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+/**
+ * Resolve, validate, dedupe, skip existing roots, then scan new folders (dialog or drag-drop).
+ */
+async function processAddedLibraryPaths(
+  mainWindow: BrowserWindow,
+  rawPaths: string[],
+): Promise<AddLibraryPathsResult> {
+  const alreadyAddedPaths: string[] = []
+  const invalidPaths: string[] = []
+  const toScan: string[] = []
+
+  const existing = settingsService.getLibraryDirectories()
+  const existingKeys = new Set(existing.map((d) => normalizeLibraryDirKey(d.path)))
+  const seenInBatch = new Set<string>()
+
+  const uniqueRaw = [...new Set(rawPaths.map((p) => p.trim()).filter(Boolean))]
+
+  for (const raw of uniqueRaw) {
+    const resolved = path.resolve(raw)
+    const key = normalizeLibraryDirKey(resolved)
+    if (seenInBatch.has(key)) continue
+    seenInBatch.add(key)
+
+    try {
+      const st = await stat(resolved)
+      if (!st.isDirectory()) {
+        invalidPaths.push(resolved)
+        continue
+      }
+    } catch {
+      invalidPaths.push(resolved)
+      continue
+    }
+
+    if (existingKeys.has(key)) {
+      alreadyAddedPaths.push(resolved)
+      continue
+    }
+
+    existingKeys.add(key)
+    toScan.push(resolved)
+  }
+
+  const allTracks: Track[] = []
+  const allNewIds: string[] = []
+  const allRemovedIds: string[] = []
+  const allChangedIds: string[] = []
+
+  for (const dirPath of toScan) {
+    settingsService.addLibraryDirectory({
+      path: dirPath,
+      dateAdded: Date.now(),
+      trackCount: 0,
+    })
+
+    const { tracks, newTrackIds, removedTrackIds, changedTrackIds } =
+      await libraryService.scanDirectory(dirPath, (current, total) => {
+        mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
+      })
+
+    allTracks.push(...tracks)
+    allNewIds.push(...newTrackIds)
+    allRemovedIds.push(...removedTrackIds)
+    allChangedIds.push(...changedTrackIds)
+
+    settingsService.set({
+      libraryDirectories: settingsService
+        .getLibraryDirectories()
+        .map((d) => (normalizeLibraryDirKey(d.path) === normalizeLibraryDirKey(dirPath) ? { ...d, trackCount: tracks.length } : d)),
+    })
+  }
+
+  restartLibraryFolderWatcher(mainWindow)
+
+  return {
+    tracks: allTracks,
+    newTrackIds: [...new Set(allNewIds)],
+    removedTrackIds: [...new Set(allRemovedIds)],
+    changedTrackIds: [...new Set(allChangedIds)],
+    alreadyAddedPaths,
+    invalidPaths,
+    newlyAddedRootPaths: [...toScan],
+  }
+}
+
 export function registerLibraryIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     IPC_LIBRARY.ADD_DIRECTORY,
-    async (): Promise<IpcResponse<LibraryDiskSyncPayload>> => {
+    async (): Promise<IpcResponse<AddLibraryPathsResult>> => {
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory', 'multiSelections'],
         title: 'Add Music Directory',
@@ -28,45 +121,22 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
         return { success: false, error: 'No directory selected' }
       }
 
-      const allTracks: Track[] = []
-      const allNewIds: string[] = []
-      const allRemovedIds: string[] = []
-      const allChangedIds: string[] = []
+      const data = await processAddedLibraryPaths(mainWindow, result.filePaths)
+      return { success: true, data }
+    },
+  )
 
-      for (const dirPath of result.filePaths) {
-        settingsService.addLibraryDirectory({
-          path: dirPath,
-          dateAdded: Date.now(),
-          trackCount: 0,
-        })
-
-        const { tracks, newTrackIds, removedTrackIds, changedTrackIds } =
-          await libraryService.scanDirectory(dirPath, (current, total) => {
-            mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
-          })
-
-        allTracks.push(...tracks)
-        allNewIds.push(...newTrackIds)
-        allRemovedIds.push(...removedTrackIds)
-        allChangedIds.push(...changedTrackIds)
-
-        settingsService.set({
-          libraryDirectories: settingsService
-            .getLibraryDirectories()
-            .map((d) => (d.path === dirPath ? { ...d, trackCount: tracks.length } : d)),
-        })
+  ipcMain.handle(
+    IPC_LIBRARY.ADD_DIRECTORY_PATHS,
+    async (_event, paths: unknown): Promise<IpcResponse<AddLibraryPathsResult>> => {
+      if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string')) {
+        return { success: false, error: 'Expected an array of path strings' }
       }
-
-      const newTrackIds = [...new Set(allNewIds)]
-      const removedTrackIds = [...new Set(allRemovedIds)]
-      const changedTrackIds = [...new Set(allChangedIds)]
-
-      restartLibraryFolderWatcher(mainWindow)
-
-      return {
-        success: true,
-        data: { tracks: allTracks, newTrackIds, removedTrackIds, changedTrackIds },
+      if (paths.length === 0) {
+        return { success: false, error: 'No paths provided' }
       }
+      const data = await processAddedLibraryPaths(mainWindow, paths as string[])
+      return { success: true, data }
     },
   )
 

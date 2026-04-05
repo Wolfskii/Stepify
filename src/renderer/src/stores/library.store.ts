@@ -1,5 +1,11 @@
 import { DANCE_CATEGORIES, DANCE_CATEGORIES_BY_ID } from '@shared/constants'
-import type { DanceId, LibraryDirectory, LibraryDiskSyncPayload, Track } from '@shared/types'
+import type {
+  AddLibraryPathsResult,
+  DanceId,
+  LibraryDirectory,
+  LibraryDiskSyncPayload,
+  Track,
+} from '@shared/types'
 import { derived, get, writable } from 'svelte/store'
 import { resolveBpmForLocalTrack } from '../services/bpmAnalysis'
 import { trackNeedsMetadataEnrichment } from '../utils/metadataQuery'
@@ -80,6 +86,59 @@ export const trackCountsByDance = derived(libraryState, ($s) => {
 export const selectedTrackIds = derived(libraryState, ($s) => $s.selectedTrackIds)
 
 export const libraryDirectories = derived(libraryState, ($s) => $s.libraryDirectories)
+
+function folderBasenamesForMessage(paths: string[], maxShow = 3): string {
+  const names = paths.map((p) => {
+    const s = p.replace(/\\/g, '/').replace(/\/$/, '')
+    const i = s.lastIndexOf('/')
+    return i >= 0 ? s.slice(i + 1) || s : s
+  })
+  if (names.length <= maxShow) return names.join(', ')
+  return `${names.slice(0, maxShow).join(', ')} (+${names.length - maxShow} more)`
+}
+
+async function applyAddLibraryScan(data: AddLibraryPathsResult): Promise<void> {
+  const { playerActions } = await import('./player.store')
+  const removed = data.removedTrackIds ?? []
+  if (removed.length > 0) {
+    libraryActions.removeTracksFromState(removed)
+    playerActions.onLibraryRemovedTracks(removed)
+  }
+  libraryActions.mergeTracksFromScan(data.tracks)
+  await libraryActions.refreshLibraryDirectories()
+  for (const id of data.changedTrackIds ?? []) {
+    const t = get(libraryState).tracks.find((x) => x.id === id)
+    if (t) playerActions.mergeTrackFromLibrary(t)
+  }
+  const n = data.newTrackIds.length
+  const touched =
+    n > 0 || removed.length > 0 || (data.changedTrackIds?.length ?? 0) > 0
+  if (n > 0) {
+    uiActions.notify(`Added ${n} new ${n === 1 ? 'track' : 'tracks'}`, 'success')
+    const idSet = new Set(data.newTrackIds)
+    const incomplete = data.tracks
+      .filter((t) => idSet.has(t.id))
+      .filter(trackNeedsMetadataEnrichment)
+      .map((t) => t.id)
+    if (incomplete.length > 0) {
+      uiActions.openModal('track-metadata', {
+        metadataQueue: incomplete,
+        metadataWizardTotal: incomplete.length,
+        metadataAfterAssign: data.newTrackIds,
+      })
+    } else {
+      const needDance = data.tracks
+        .filter((t) => idSet.has(t.id) && t.dances.length === 0)
+        .map((t) => t.id)
+      if (needDance.length > 0) {
+        uiActions.openModal('assign-folder-dance', { folderTrackIds: needDance })
+      }
+      void libraryActions.fillMissingBpmForTrackIds(data.newTrackIds)
+    }
+  } else if (!touched) {
+    uiActions.notify('Folder is already fully indexed', 'info')
+  }
+}
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
@@ -164,46 +223,39 @@ export const libraryActions = {
         }
         return
       }
-      const { playerActions } = await import('./player.store')
-      const removed = r.data.removedTrackIds ?? []
-      if (removed.length > 0) {
-        libraryActions.removeTracksFromState(removed)
-        playerActions.onLibraryRemovedTracks(removed)
+      await applyAddLibraryScan(r.data)
+    } finally {
+      libraryActions.setScanning(false)
+      libraryActions.setScanProgress(null)
+    }
+  },
+
+  /** OS drag-and-drop of one or more folders onto the library list (Electron). */
+  async addMusicFoldersFromDroppedPaths(paths: string[]) {
+    const unique = [...new Set(paths.map((p) => p.trim()).filter(Boolean))]
+    if (unique.length === 0) return
+    libraryActions.setScanning(true)
+    try {
+      const r = await window.electronAPI.library.addDirectoryFromPaths(unique)
+      if (!r.success || !r.data) {
+        uiActions.notify(r.error ?? 'Could not add folders', 'error')
+        return
       }
-      libraryActions.mergeTracksFromScan(r.data.tracks)
-      await libraryActions.refreshLibraryDirectories()
-      for (const id of r.data.changedTrackIds ?? []) {
-        const t = get(libraryState).tracks.find((x) => x.id === id)
-        if (t) playerActions.mergeTrackFromLibrary(t)
+      const { alreadyAddedPaths, invalidPaths } = r.data
+      if (alreadyAddedPaths.length > 0) {
+        uiActions.notify(
+          `Already in library: ${folderBasenamesForMessage(alreadyAddedPaths)}`,
+          'warning',
+        )
       }
-      const n = r.data.newTrackIds.length
-      const touched =
-        n > 0 || removed.length > 0 || (r.data.changedTrackIds?.length ?? 0) > 0
-      if (n > 0) {
-        uiActions.notify(`Added ${n} new ${n === 1 ? 'track' : 'tracks'}`, 'success')
-        const idSet = new Set(r.data.newTrackIds)
-        const incomplete = r.data.tracks
-          .filter((t) => idSet.has(t.id))
-          .filter(trackNeedsMetadataEnrichment)
-          .map((t) => t.id)
-        if (incomplete.length > 0) {
-          uiActions.openModal('track-metadata', {
-            metadataQueue: incomplete,
-            metadataWizardTotal: incomplete.length,
-            metadataAfterAssign: r.data.newTrackIds,
-          })
-        } else {
-          const needDance = r.data.tracks
-            .filter((t) => idSet.has(t.id) && t.dances.length === 0)
-            .map((t) => t.id)
-          if (needDance.length > 0) {
-            uiActions.openModal('assign-folder-dance', { folderTrackIds: needDance })
-          }
-          void libraryActions.fillMissingBpmForTrackIds(r.data.newTrackIds)
-        }
-      } else if (!touched) {
-        uiActions.notify('Folder is already fully indexed', 'info')
+      if (invalidPaths.length > 0) {
+        uiActions.notify(
+          `Not a folder (skipped): ${folderBasenamesForMessage(invalidPaths)}`,
+          'warning',
+        )
       }
+      if (r.data.newlyAddedRootPaths.length === 0) return
+      await applyAddLibraryScan(r.data)
     } finally {
       libraryActions.setScanning(false)
       libraryActions.setScanProgress(null)

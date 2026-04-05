@@ -100,6 +100,16 @@ export interface LibraryDiskSyncPayload {
   changedTrackIds: string[]
 }
 
+/** Same as {@link LibraryDiskSyncPayload} plus paths skipped when adding folders by path (drag-drop). */
+export interface AddLibraryPathsResult extends LibraryDiskSyncPayload {
+  /** Resolved paths already registered as library roots */
+  alreadyAddedPaths: string[]
+  /** Paths that were not readable directories (e.g. files or broken symlinks) */
+  invalidPaths: string[]
+  /** Library roots that were new in this operation and were scanned */
+  newlyAddedRootPaths: string[]
+}
+
 // ─── Playback ─────────────────────────────────────────────────────────────────
 
 export type RepeatMode = 'off' | 'all' | 'one'

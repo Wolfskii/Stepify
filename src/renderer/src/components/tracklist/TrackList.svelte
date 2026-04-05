@@ -11,6 +11,7 @@ import {
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import TrackItem from './TrackItem.svelte'
 import { activeModal } from '../../stores/ui.store'
+import { pathsFromFileDrop } from '../../utils/dropPaths'
 
 onMount(() => {
   const onKey = (e: KeyboardEvent) => {
@@ -40,6 +41,34 @@ function addDirectory() {
   void libraryActions.pickAddMusicFolder()
 }
 
+let dragDepth = 0
+let dragOver = false
+
+function onDragEnter(e: DragEvent) {
+  e.preventDefault()
+  dragDepth++
+  if (e.dataTransfer?.types?.includes('Files')) dragOver = true
+}
+
+function onDragLeave(e: DragEvent) {
+  e.preventDefault()
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver = false
+}
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  dragDepth = 0
+  dragOver = false
+  const paths = pathsFromFileDrop(e.dataTransfer)
+  if (paths.length) void libraryActions.addMusicFoldersFromDroppedPaths(paths)
+}
+
 /** Clicks on chrome/empty space (not on a track row or button) clear multi-select. */
 function onTrackListBackgroundClick(e: MouseEvent) {
   const el = e.target as HTMLElement
@@ -51,7 +80,17 @@ function onTrackListBackgroundClick(e: MouseEvent) {
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
-<div class="track-list" role="presentation" on:click={onTrackListBackgroundClick}>
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<div
+  class="track-list"
+  class:track-list--drag={dragOver}
+  role="presentation"
+  on:click={onTrackListBackgroundClick}
+  on:dragenter={onDragEnter}
+  on:dragleave={onDragLeave}
+  on:dragover={onDragOver}
+  on:drop={onDrop}
+>
   <!-- Header -->
   <header class="track-list__header">
     <div class="track-list__title-row">
@@ -131,6 +170,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
           </p>
         {:else}
           <p>Your library is empty.</p>
+          <p class="track-list__hint">Drag a music folder here, or:</p>
           <button class="track-list__add-btn" on:click={addDirectory}>
             Add a music folder
           </button>
@@ -151,6 +191,13 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     height: 100%;
     min-width: 0;
     overflow: hidden;
+  }
+
+  .track-list--drag {
+    outline: 2px dashed var(--color-accent);
+    outline-offset: -6px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   }
 
   .track-list__header {

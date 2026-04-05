@@ -11,6 +11,8 @@
 export const IPC_LIBRARY = {
   /** Add a local directory to the music library */
   ADD_DIRECTORY: 'library:add-directory',
+  /** Add one or more directories by absolute path (e.g. OS drag-and-drop) */
+  ADD_DIRECTORY_PATHS: 'library:add-directory-paths',
   /** Remove a directory from the library and all tracks whose files lived under it */
   REMOVE_DIRECTORY: 'library:remove-directory',
   /** Remove a single local track from the library store */
