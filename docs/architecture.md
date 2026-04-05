@@ -44,7 +44,7 @@ Runs in Chromium. Has DOM access, Web Audio API, but no Node.js.
 - `stores/` — Svelte writable stores for all application state
 - `services/audioEngine.ts` — Web Audio API playback engine
 - `services/spotifyService.ts` — Renderer-side Spotify operations
-- `components/` — Svelte UI components
+- `components/` — Svelte UI components (library sidebar uses `SidebarCollapsibleGroup`; **Finals** swaps main content via `finals.store` / `FinalsPanel` — `docs/practice-modes.md`)
 
 ### Shared (`src/shared/`)
 

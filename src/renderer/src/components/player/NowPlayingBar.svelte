@@ -422,9 +422,9 @@ onDestroy(() => {
           <button
             type="button"
             class="np-btn np-btn--icon"
-            class:active={$playerState.shuffle}
+            class:np-btn--shuffle-on={$playerState.shuffle}
             on:click={() => void libraryActions.toggleShufflePlayback()}
-            title="Shuffle (weighted by likes; list order matches queue)"
+            title="Shuffle the playing list’s tracks (or the list you’re viewing if nothing is playing); weighted by likes; list order matches queue"
             aria-label="Shuffle"
             aria-pressed={$playerState.shuffle}
           >
@@ -845,6 +845,15 @@ onDestroy(() => {
   .np-btn--icon.active:hover:not(:disabled),
   .np-btn--icon.repeat-one:hover:not(:disabled) {
     color: var(--color-accent-hover);
+  }
+
+  /* Shuffle is scoped to the playing or in-view list — keep “on” neutral, not accent */
+  .np-btn--icon.np-btn--shuffle-on {
+    color: var(--color-text-secondary);
+  }
+
+  .np-btn--icon.np-btn--shuffle-on:hover:not(:disabled) {
+    color: var(--color-text-primary);
   }
 
   .np-btn--icon.repeat-one {

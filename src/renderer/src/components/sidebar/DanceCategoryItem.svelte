@@ -136,7 +136,9 @@ async function onRowDrop(e: DragEvent) {
   on:dragleave={onRowDragLeave}
   on:drop={onRowDrop}
 >
-  <span class="dance-item__dot" aria-hidden="true"></span>
+  <span class="dance-item__lead" aria-hidden="true">
+    <span class="dance-item__dot"></span>
+  </span>
   <span class="dance-item__name truncate">{dance.name}</span>
   {#if isPlaybackSource}
     <SidebarPlaybackIndicator />
@@ -196,6 +198,16 @@ async function onRowDrop(e: DragEvent) {
 
   .dance-item--reorder-hover {
     box-shadow: inset 0 2px 0 0 var(--color-accent);
+  }
+
+  /* Same width as folder / stub row icons so labels share one vertical rhythm */
+  .dance-item__lead {
+    flex-shrink: 0;
+    width: var(--space-4);
+    height: var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
   }
 
   .dance-item__dot {

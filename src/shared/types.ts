@@ -190,6 +190,34 @@ export interface PracticeSession {
   transitionGapSeconds: number
 }
 
+/** One competition-style final block (discipline + dances + timing). */
+export interface FinalRoundConfig {
+  discipline: DanceStyle
+  /** Subset of the five dances for `discipline`, competition order preserved. */
+  danceIds: DanceId[]
+  /** Minimum track duration required (seconds); playlist only picks tracks at least this long. */
+  danceDurationSec: number
+  breakDurationSec: number
+}
+
+/** Sidebar → Finals flow: null = normal library list. */
+export type FinalsFlow = null | 'count' | 'configure' | 'list'
+
+/** Built finals run: songs + pauses between dances within each final. */
+export type FinalsPlaylistRow =
+  | {
+      kind: 'track'
+      trackId: string | null
+      danceId: DanceId
+      finalIndex: number
+      emptyReason?: string
+    }
+  | {
+      kind: 'pause'
+      seconds: number
+      finalIndex: number
+    }
+
 // ─── Spotify ──────────────────────────────────────────────────────────────────
 
 export interface SpotifyCredentials {

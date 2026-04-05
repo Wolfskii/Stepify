@@ -31,6 +31,13 @@ Chrome is **Spotify-inspired**: outer background `#000`, floating `#121212` pane
 └───────────────────────────────────────────────────────────────────┘
 ```
 
+### Library sidebar
+
+- **Order** (top to bottom): All Tracks → **Latin** → **Standard** → **Modes** → **Other** → **Folders** (when library folders exist) → footer actions.
+- **Collapsible sections** — **Latin**, **Standard**, **Modes**, **Other**, and **Folders** share one pattern: uppercase header row with chevron; body toggles with `aria-expanded` / `aria-controls`. **Folders** and **Other** start **collapsed**; the rest start **expanded**.
+- **Modes** — **Finals** opens the finals builder in the **main content** (replaces the track list). **Rounds** and **New custom mode…** are stubs (toast).
+- **Other** (stub) — **Time blocks** and **Miscellaneous** (fanfares, PA / ceremony cues) — same stub behavior. See `docs/practice-modes.md`.
+
 ---
 
 ## Design Tokens
@@ -122,7 +129,7 @@ The tempo slider is the most important UI element. It must feel premium.
 - **Assign dance** — Per-row **+**, or drag **title / artist text** onto a sidebar dance; multi-select (click / Ctrl / Shift) and drag from title text the same way.
 - **Reorder in list** — Drag the **row** (not play, artwork, BPM, or dance controls) to change order. With shuffle off, this becomes a **custom list order** that persists when switching between views (dances, folders, All Tracks); returning to the view shows the custom order again. Custom order is cleared by: clicking a **sort column header**, toggling **shuffle**, or **restarting the app**. Column-sort carets are hidden while order is custom. If playback was started from that same list, the **player queue** follows. With shuffle on, reorder updates the shuffled sequence (carets stay hidden while shuffle order drives the list).
 - **Column sort** — Header buttons on **Title**, **Duration**, **BPM**, **Likes**, and **Dance** (when not in a single-dance filter) sort the visible list; styling stays neutral (no accent on the “active” column). A second click on the same header reverses direction. Choosing a sort clears manual order and shuffle display order for that list. Default order remains popularity-based until the user picks a column.
-- **Shuffle** — Random order with a **light** bias toward higher popularity (still varied, not “likes-first”).
+- **Shuffle** — Random order with a **light** bias toward higher popularity (still varied, not “likes-first”). Toggling shuffle applies to the **list that is currently playing** (queue source), or the **list in view** when nothing is playing. The Now Playing **shuffle** control uses a **neutral** “on” state (not accent); **repeat** remains accent when active.
 - **Seek bar times** — Elapsed and total show **listening (wall-clock) time at the current tempo** (slower tempo ⇒ longer displayed duration). The bar still seeks by position in the underlying file.
 
 ---

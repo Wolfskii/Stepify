@@ -10,7 +10,7 @@ A cross-platform desktop dance music player built for ballroom and latin dancers
 
 - **Music Library** — Add/remove folders and individual tracks; bulk-assign a dance when importing a folder (or skip); drag or **+** to set a dance (**one dance per track** — assigning replaces the previous tag). With a dance selected in the sidebar, **Delete**/**Backspace** removes selected tracks from that dance only; on **All Tracks**, the same keys remove from the library (with confirmation)
 - **Playback times at tempo** — Seek labels show how long the track takes at the current tempo (updates live with the slider)
-- **Dance Categories** — 10 built-in dances (Standard + Latin) with BPM ranges; create custom categories
+- **Dance Categories** — 10 built-in dances (Standard + Latin) with BPM ranges; library sidebar groups are collapsible (**Folders** and **Other** start collapsed). **Finals** (under Modes) opens a multi-step finals builder in the main panel (random songs ≥ chosen length per dance + break rows); **Rounds**, **New custom mode…**, and **Other** rows are still stubs (`docs/practice-modes.md`); create custom categories
 - **Tactile Tempo Control** — Vertical slider with pitch-preserving time stretching; drag, touch, and keyboard control
 - **BPM Display** — Shows original and tempo-adjusted BPM in real time
 - **Spotify Integration** — OAuth login, track search, add Spotify tracks to dance categories _(coming soon)_

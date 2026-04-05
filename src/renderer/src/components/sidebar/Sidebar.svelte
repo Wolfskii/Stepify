@@ -1,6 +1,7 @@
 <script lang="ts">
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import DanceCategoryItem from './DanceCategoryItem.svelte'
+import SidebarCollapsibleGroup from './SidebarCollapsibleGroup.svelte'
 import { latinOrder, standardOrder } from '../../stores/danceOrder.store'
 import SearchBar from './SearchBar.svelte'
 import { get } from 'svelte/store'
@@ -13,10 +14,20 @@ import {
   selectedFolderPath,
 } from '../../stores/library.store'
 import { uiActions } from '../../stores/ui.store'
+import { finalsActions } from '../../stores/finals.store'
 import { currentTrack, playerActions, playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { audioEngine } from '../../services/audioEngine'
 import { folderBadgeColor } from '../../utils/folderBadgeColor'
+
+// TODO: see docs/practice-modes.md — stub until practice / competition builder ships
+function practiceModesStub(label: string) {
+  uiActions.notify(
+    `${label} — coming soon. You’ll compose runs from dances, time blocks, and announcement cues (see docs/practice-modes.md).`,
+    'info',
+    4500,
+  )
+}
 
 $: latinDances = $latinOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
 $: standardDances = $standardOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
@@ -59,9 +70,6 @@ function showAllTracks() {
   libraryActions.selectDance(null)
   libraryActions.setSearchQuery('')
 }
-
-/** Folders block starts collapsed; chevron toggles list visibility. */
-let foldersSectionOpen = false
 </script>
 
 <nav class="sidebar">
@@ -95,106 +103,211 @@ let foldersSectionOpen = false
   </div>
 
   <!-- Latin dances -->
-  <div class="sidebar__group">
-    <div class="sidebar__group-label">Latin</div>
+  <SidebarCollapsibleGroup title="Latin" sectionId="sidebar-section-latin" defaultOpen={true}>
     {#each latinDances as dance}
       <DanceCategoryItem {dance} />
     {/each}
-  </div>
+  </SidebarCollapsibleGroup>
 
   <!-- Standard dances -->
-  <div class="sidebar__group">
-    <div class="sidebar__group-label">Standard</div>
+  <SidebarCollapsibleGroup title="Standard" sectionId="sidebar-section-standard" defaultOpen={true}>
     {#each standardDances as dance}
       <DanceCategoryItem {dance} />
     {/each}
-  </div>
+  </SidebarCollapsibleGroup>
 
-  <!-- Library folders -->
-  {#if $libraryDirectories.length > 0}
-    <div class="sidebar__group">
-      <button
-        type="button"
-        class="sidebar__group-label sidebar__group-label--folders-toggle"
-        aria-expanded={foldersSectionOpen}
-        aria-controls="sidebar-folders-list"
-        on:click={() => (foldersSectionOpen = !foldersSectionOpen)}
-      >
-        <span>Folders</span>
+  <!-- Practice modes (competition-style templates — stub) -->
+  <SidebarCollapsibleGroup title="Modes" sectionId="sidebar-section-modes" defaultOpen={true}>
+    <button
+      type="button"
+      class="sidebar__aux-row sidebar__aux-row--finals"
+      title="Build a finals run: discipline, dances, timings, random songs"
+      aria-label="Finals mode"
+      on:click={() => finalsActions.openFromSidebar()}
+    >
+      <span class="sidebar__aux-row__icon" aria-hidden="true">
         <svg
-          class="sidebar__folders-chevron"
-          class:sidebar__folders-chevron--open={foldersSectionOpen}
+          class="sidebar__aux-svg"
           width="14"
           height="14"
-          viewBox="0 0 16 16"
+          viewBox="0 0 24 24"
           fill="none"
-          aria-hidden="true"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+          <path d="M4 22h16" />
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+        </svg>
+      </span>
+      <span class="sidebar__aux-row__label">Finals</span>
+    </button>
+    <button
+      type="button"
+      class="sidebar__aux-row sidebar__aux-row--rounds"
+      title="Rounds flow — coming soon"
+      aria-label="Rounds mode"
+      on:click={() => practiceModesStub('Rounds')}
+    >
+      <span class="sidebar__aux-row__icon" aria-hidden="true">
+        <svg
+          class="sidebar__aux-svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M17 2.1l4 4-4 4" />
+          <path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8" />
+          <path d="M7 21.9l-4-4 4-4" />
+          <path d="M21 11.8v2a4 4 0 0 1-4 4H4.2" />
+        </svg>
+      </span>
+      <span class="sidebar__aux-row__label">Rounds</span>
+    </button>
+    <button
+      type="button"
+      class="sidebar__aux-row sidebar__aux-row--muted"
+      title="Create a custom mode from dances, pauses, and cues"
+      aria-label="Add custom mode"
+      on:click={() => practiceModesStub('Custom mode')}
+    >
+      <span class="sidebar__aux-row__icon" aria-hidden="true">
+        <svg
+          class="sidebar__aux-svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </span>
+      <span class="sidebar__aux-row__label">New custom mode…</span>
+    </button>
+  </SidebarCollapsibleGroup>
+
+  <!-- Time blocks & ceremony / PA cues (stub) -->
+  <SidebarCollapsibleGroup title="Other" sectionId="sidebar-section-other" defaultOpen={false}>
+    <button
+      type="button"
+      class="sidebar__aux-row sidebar__aux-row--time"
+      title="Timed gaps between dances — coming soon"
+      aria-label="Time blocks"
+      on:click={() => practiceModesStub('Time blocks')}
+    >
+      <span class="sidebar__aux-row__icon" aria-hidden="true">
+        <svg
+          class="sidebar__aux-svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 6v6l4 2" />
+        </svg>
+      </span>
+      <span class="sidebar__aux-row__label">Time blocks</span>
+    </button>
+    <button
+      type="button"
+      class="sidebar__aux-row sidebar__aux-row--misc"
+      title="Fanfares, PA announcements, couple presentations — coming soon"
+      aria-label="Miscellaneous cues"
+      on:click={() => practiceModesStub('Miscellaneous')}
+    >
+      <span class="sidebar__aux-row__icon" aria-hidden="true">
+        <svg
+          class="sidebar__aux-svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
           <path
-            d="M4 6l4 4 4-4"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z"
           />
         </svg>
-      </button>
-      <div
-        id="sidebar-folders-list"
-        class="sidebar__folders-list"
-        class:sidebar__folders-list--collapsed={!foldersSectionOpen}
-      >
-        {#each $libraryDirectories as dir}
-          <div class="sidebar__folder-row">
-            <button
-              type="button"
-              class="sidebar__folder-item"
-              class:sidebar__folder-item--active={$selectedFolderPath != null &&
-                pathsMatchSidebar($selectedFolderPath, dir.path)}
-              class:sidebar__folder-item--queue-source={$playerState.track != null &&
-                $playerState.playbackListFolderPath != null &&
-                pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
-              title={dir.path}
-              on:click={() => libraryActions.selectFolder(dir.path)}
+      </span>
+      <span class="sidebar__aux-row__label">Miscellaneous</span>
+    </button>
+  </SidebarCollapsibleGroup>
+
+  <!-- Library folders (collapsed by default) -->
+  {#if $libraryDirectories.length > 0}
+    <SidebarCollapsibleGroup title="Folders" sectionId="sidebar-section-folders" defaultOpen={false}>
+      {#each $libraryDirectories as dir}
+        <div class="sidebar__folder-row">
+          <button
+            type="button"
+            class="sidebar__folder-item"
+            class:sidebar__folder-item--active={$selectedFolderPath != null &&
+              pathsMatchSidebar($selectedFolderPath, dir.path)}
+            class:sidebar__folder-item--queue-source={$playerState.track != null &&
+              $playerState.playbackListFolderPath != null &&
+              pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
+            title={dir.path}
+            on:click={() => libraryActions.selectFolder(dir.path)}
+          >
+            <span
+              class="sidebar__folder-icon"
+              style="--folder-icon-accent: {folderBadgeColor(dir.defaultDanceId)}"
+              aria-hidden="true"
             >
-              <span
-                class="sidebar__folder-icon"
-                style="--folder-icon-accent: {folderBadgeColor(dir.defaultDanceId)}"
-                aria-hidden="true"
-              >
-                <svg class="sidebar__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
-                  />
-                </svg>
-              </span>
-              <span class="sidebar__folder-item__label truncate">{folderLabel(dir.path)}</span>
-              {#if $playerState.track != null &&
-                $playerState.playbackListFolderPath != null &&
-                pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
-                <SidebarPlaybackIndicator />
-              {/if}
-            </button>
-            <button
-              type="button"
-              class="sidebar__folder-remove"
-              title="Remove folder from library"
-              aria-label="Remove {folderLabel(dir.path)} from library"
-              on:click|stopPropagation={() => removeFolder(dir.path, folderLabel(dir.path))}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <svg class="sidebar__folder-icon__svg" viewBox="0 0 24 24" fill="currentColor">
                 <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
+                  d="M4 6a2 2 0 012-2h4.5l1.71 1.71a1 1 0 00.7.29H20a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"
                 />
               </svg>
-            </button>
-          </div>
-        {/each}
-      </div>
-    </div>
+            </span>
+            <span class="sidebar__folder-item__label truncate">{folderLabel(dir.path)}</span>
+            {#if $playerState.track != null &&
+              $playerState.playbackListFolderPath != null &&
+              pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
+              <SidebarPlaybackIndicator />
+            {/if}
+          </button>
+          <button
+            type="button"
+            class="sidebar__folder-remove"
+            title="Remove folder from library"
+            aria-label="Remove {folderLabel(dir.path)} from library"
+            on:click|stopPropagation={() => removeFolder(dir.path, folderLabel(dir.path))}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l8 8M12 4l-8 8"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      {/each}
+    </SidebarCollapsibleGroup>
   {/if}
 
   <!-- Spacer -->
@@ -303,66 +416,94 @@ let foldersSectionOpen = false
     color: var(--color-accent);
   }
 
-  .sidebar__group {
-    margin-bottom: var(--space-4);
-  }
-
-  .sidebar__group-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
-    padding: var(--space-1) var(--space-3);
-    margin-bottom: var(--space-1);
-  }
-
-  .sidebar__group-label--folders-toggle {
+  .sidebar__aux-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: var(--space-2);
     width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--space-2) var(--space-3);
     margin-bottom: var(--space-1);
+    border-radius: var(--radius-md);
     border: none;
     background: none;
     font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
     text-align: left;
     cursor: pointer;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-muted);
     transition:
       background var(--duration-fast) var(--ease-out),
       color var(--duration-fast) var(--ease-out);
   }
 
-  .sidebar__group-label--folders-toggle:hover {
-    background: var(--color-bg-elevated);
-    color: var(--color-text-secondary);
+  .sidebar__aux-row:last-child {
+    margin-bottom: 0;
   }
 
-  .sidebar__group-label--folders-toggle:focus-visible {
+  .sidebar__aux-row:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+  }
+
+  .sidebar__aux-row:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
-  .sidebar__folders-chevron {
-    flex-shrink: 0;
+  .sidebar__aux-row--muted {
     color: var(--color-text-muted);
-    transform: rotate(-90deg);
-    transition: transform var(--duration-fast) var(--ease-out);
+    font-weight: 500;
   }
 
-  .sidebar__folders-chevron--open {
-    transform: rotate(0deg);
-  }
-
-  .sidebar__group-label--folders-toggle:hover .sidebar__folders-chevron {
+  .sidebar__aux-row--muted:hover {
     color: var(--color-text-secondary);
   }
 
-  .sidebar__folders-list--collapsed {
-    display: none;
+  .sidebar__aux-row__icon {
+    flex-shrink: 0;
+    width: var(--space-4);
+    height: var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    color: var(--color-text-muted);
+  }
+
+  .sidebar__aux-svg {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .sidebar__aux-row--finals .sidebar__aux-row__icon {
+    color: var(--color-warning);
+  }
+
+  .sidebar__aux-row--rounds .sidebar__aux-row__icon {
+    color: var(--color-dance-paso-doble);
+  }
+
+  .sidebar__aux-row--time .sidebar__aux-row__icon {
+    color: var(--color-dance-slow-waltz);
+  }
+
+  .sidebar__aux-row--misc .sidebar__aux-row__icon {
+    color: var(--color-dance-rumba);
+  }
+
+  .sidebar__aux-row--muted .sidebar__aux-row__icon {
+    color: var(--color-text-muted);
+  }
+
+  .sidebar__aux-row--muted:hover .sidebar__aux-row__icon {
+    color: var(--color-text-secondary);
+  }
+
+  .sidebar__aux-row__label {
+    min-width: 0;
   }
 
   .sidebar__folder-row {
@@ -378,6 +519,7 @@ let foldersSectionOpen = false
     min-width: 0;
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
@@ -409,9 +551,11 @@ let foldersSectionOpen = false
 
   .sidebar__folder-icon {
     flex-shrink: 0;
+    width: var(--space-4);
+    height: var(--space-4);
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     color: var(--folder-icon-accent);
     opacity: 0.92;
   }
