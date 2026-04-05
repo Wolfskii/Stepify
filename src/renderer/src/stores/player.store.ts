@@ -270,6 +270,15 @@ export const playerActions = {
     }))
   },
 
+  /** Merge full track row from library (metadata / artwork updates). */
+  mergeTrackFromLibrary(track: Track) {
+    playerState.update((s) => ({
+      ...s,
+      queue: s.queue.map((t) => (t.id === track.id ? { ...t, ...track } : t)),
+      track: s.track?.id === track.id ? { ...s.track, ...track } : s.track,
+    }))
+  },
+
   /** Remove BPM from queue/current track in memory (after library clear). */
   stripTrackBpm(trackId: string) {
     const strip = (t: Track): Track => {

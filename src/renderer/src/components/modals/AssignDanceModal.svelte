@@ -73,7 +73,7 @@ function close() {
 
   .modal {
     width: min(420px, 100%);
-    max-height: min(80vh, 520px);
+    max-height: var(--modal-max-height);
     overflow: auto;
     padding: var(--space-6);
     border-radius: var(--radius-lg);

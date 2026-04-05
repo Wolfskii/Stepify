@@ -17,6 +17,8 @@ export const IPC_LIBRARY = {
   REMOVE_TRACK: 'library:remove-track',
   /** Get all known library directories */
   GET_DIRECTORIES: 'library:get-directories',
+  /** Set or clear default dance for a library folder (new scans + UI). */
+  SET_FOLDER_DEFAULT_DANCE: 'library:set-folder-default-dance',
   /** Get all tracks (optionally filtered by dance) */
   GET_TRACKS: 'library:get-tracks',
   /** Assign a track to one or more dance categories */
@@ -38,6 +40,10 @@ export const IPC_LIBRARY = {
   SET_TRACK_BPM: 'library:set-track-bpm',
   /** Remove stored BPM from the library track (does not strip file tags) */
   CLEAR_TRACK_BPM: 'library:clear-track-bpm',
+  /** Search online catalogs for title/artist/art matches */
+  SEARCH_TRACK_METADATA: 'library:search-track-metadata',
+  /** Apply title/artist/album/cover to a track (and embed tags for MP3/FLAC when possible) */
+  UPDATE_TRACK_METADATA: 'library:update-track-metadata',
 } as const
 
 // ─── Audio Channels ───────────────────────────────────────────────────────────

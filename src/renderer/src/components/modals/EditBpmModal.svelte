@@ -157,6 +157,8 @@ async function clearStored() {
 
   .modal {
     width: min(400px, 100%);
+    max-height: var(--modal-max-height);
+    overflow: auto;
     padding: var(--space-6);
     border-radius: var(--radius-lg);
     background: var(--color-bg-surface);

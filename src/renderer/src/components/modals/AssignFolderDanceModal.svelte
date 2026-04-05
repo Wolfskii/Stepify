@@ -1,17 +1,38 @@
 <script lang="ts">
-import { activeModal, folderAssignTrackIds, uiActions } from '../../stores/ui.store'
-import { libraryActions } from '../../stores/library.store'
+import { activeModal, folderAssignTrackIds, folderDanceSettingsPath, uiActions } from '../../stores/ui.store'
+import { libraryActions, libraryDirectories } from '../../stores/library.store'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import { orderedDanceCategories } from '../../stores/danceOrder.store'
 import type { DanceId } from '@shared/types'
 
+$: isFolderSettings = !!$folderDanceSettingsPath
+$: folderPath = $folderDanceSettingsPath
+$: currentDefaultId =
+  folderPath != null
+    ? $libraryDirectories.find((d) => d.path === folderPath)?.defaultDanceId
+    : undefined
+$: currentDefaultName = currentDefaultId
+  ? DANCE_CATEGORIES_BY_ID[currentDefaultId]?.name
+  : null
+
 async function assignAll(danceId: DanceId) {
+  if (isFolderSettings && folderPath) {
+    await libraryActions.applyFolderDefaultDance(folderPath, danceId)
+    uiActions.closeModal()
+    return
+  }
   const ids = $folderAssignTrackIds ?? []
   if (ids.length === 0) {
     uiActions.closeModal()
     return
   }
   await libraryActions.assignDanceToTracks(ids, danceId)
+  uiActions.closeModal()
+}
+
+async function clearFolderDefault() {
+  if (!folderPath) return
+  await libraryActions.clearFolderDefaultDance(folderPath)
   uiActions.closeModal()
 }
 
@@ -25,7 +46,7 @@ function skip() {
     $activeModal === 'assign-folder-dance' && e.key === 'Escape' && skip()}
 />
 
-{#if $activeModal === 'assign-folder-dance' && ($folderAssignTrackIds?.length ?? 0) > 0}
+{#if $activeModal === 'assign-folder-dance' && (isFolderSettings || ($folderAssignTrackIds?.length ?? 0) > 0)}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="modal-backdrop" role="presentation" on:click={skip}>
@@ -36,27 +57,55 @@ function skip() {
       aria-labelledby="folder-assign-title"
       on:click|stopPropagation
     >
-      <h2 id="folder-assign-title" class="modal__title">New tracks added</h2>
-      <p class="modal__hint">
-        Assign all <strong>{$folderAssignTrackIds?.length}</strong> new
-        {$folderAssignTrackIds?.length === 1 ? 'file' : 'files'} to one dance, or skip if this folder is
-        mixed.
-      </p>
-      <div class="modal__grid">
-        {#each $orderedDanceCategories as d}
-          <button
-            type="button"
-            class="modal__dance"
-            style="--dance-color: {d.color}"
-            on:click={() => assignAll(d.id)}
-          >
-            {d.name}
-          </button>
-        {/each}
-      </div>
-      <button type="button" class="modal__skip" on:click={skip}>
-        Don’t assign (mixed folder)
-      </button>
+      {#if isFolderSettings}
+        <h2 id="folder-assign-title" class="modal__title">Folder dance</h2>
+        <p class="modal__hint">
+          Choose a dance for this folder. New files discovered here will get that tag automatically. Applying
+          also updates every track already in this folder.
+        </p>
+        {#if currentDefaultName}
+          <p class="modal__current">Current default: <strong>{currentDefaultName}</strong></p>
+        {:else}
+          <p class="modal__current modal__current--muted">No default — new files stay untagged until you assign.</p>
+        {/if}
+        <div class="modal__grid">
+          {#each $orderedDanceCategories as d}
+            <button
+              type="button"
+              class="modal__dance"
+              style="--dance-color: {d.color}"
+              on:click={() => assignAll(d.id)}
+            >
+              {d.name}
+            </button>
+          {/each}
+        </div>
+        <button type="button" class="modal__skip" on:click={clearFolderDefault}>
+          No automatic assignment
+        </button>
+      {:else}
+        <h2 id="folder-assign-title" class="modal__title">New tracks added</h2>
+        <p class="modal__hint">
+          Assign all <strong>{$folderAssignTrackIds?.length}</strong> new
+          {$folderAssignTrackIds?.length === 1 ? 'file' : 'files'} to one dance, or skip if this folder is
+          mixed.
+        </p>
+        <div class="modal__grid">
+          {#each $orderedDanceCategories as d}
+            <button
+              type="button"
+              class="modal__dance"
+              style="--dance-color: {d.color}"
+              on:click={() => assignAll(d.id)}
+            >
+              {d.name}
+            </button>
+          {/each}
+        </div>
+        <button type="button" class="modal__skip" on:click={skip}>
+          Don’t assign (mixed folder)
+        </button>
+      {/if}
     </div>
   </div>
 {/if}
@@ -75,7 +124,7 @@ function skip() {
 
   .modal {
     width: min(420px, 100%);
-    max-height: min(80vh, 520px);
+    max-height: var(--modal-max-height);
     overflow: auto;
     padding: var(--space-6);
     border-radius: var(--radius-lg);
@@ -93,8 +142,18 @@ function skip() {
   .modal__hint {
     font-size: 13px;
     color: var(--color-text-muted);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
     line-height: 1.45;
+  }
+
+  .modal__current {
+    font-size: 12px;
+    margin-bottom: var(--space-4);
+    color: var(--color-text-secondary);
+  }
+
+  .modal__current--muted {
+    color: var(--color-text-muted);
   }
 
   .modal__grid {

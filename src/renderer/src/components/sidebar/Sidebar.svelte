@@ -1,5 +1,6 @@
 <script lang="ts">
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
+import type { LibraryDirectory } from '@shared/types'
 import DanceCategoryItem from './DanceCategoryItem.svelte'
 import { latinOrder, standardOrder } from '../../stores/danceOrder.store'
 import SearchBar from './SearchBar.svelte'
@@ -11,7 +12,7 @@ import {
   libraryDirectories,
   selectedDanceId,
 } from '../../stores/library.store'
-import { uiActions, activePanel } from '../../stores/ui.store'
+import { activePanel, uiActions } from '../../stores/ui.store'
 import { currentTrack, playerActions, playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { audioEngine } from '../../services/audioEngine'
@@ -25,6 +26,15 @@ function folderLabel(fullPath: string): string {
   const s = fullPath.replace(/[/\\]+$/, '')
   const i = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'))
   return i >= 0 ? s.slice(i + 1) : s
+}
+
+function folderRowTitle(dir: LibraryDirectory): string {
+  const pathLine = dir.path
+  if (dir.defaultDanceId) {
+    const n = DANCE_CATEGORIES_BY_ID[dir.defaultDanceId]?.name ?? dir.defaultDanceId
+    return `${pathLine}\nDefault for new files: ${n}. Click to change.`
+  }
+  return `${pathLine}\nClick to set a default dance for new files in this folder.`
 }
 
 async function removeFolder(path: string, label: string) {
@@ -122,9 +132,15 @@ function showAllTracks() {
       <div class="sidebar__group-label">Folders</div>
       {#each $libraryDirectories as dir}
         <div class="sidebar__folder-row">
-          <span class="sidebar__folder-name truncate" title={dir.path}>
+          <button
+            type="button"
+            class="sidebar__folder-name truncate"
+            title={folderRowTitle(dir)}
+            on:click={() =>
+              uiActions.openModal('assign-folder-dance', { folderSettingsPath: dir.path })}
+          >
             {folderLabel(dir.path)}
-          </span>
+          </button>
           <span class="sidebar__folder-count">{dir.trackCount}</span>
           <button
             type="button"
@@ -310,6 +326,19 @@ function showAllTracks() {
   .sidebar__folder-name {
     flex: 1;
     min-width: 0;
+    border: none;
+    background: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+
+  .sidebar__folder-name:hover {
+    color: var(--color-text-primary);
   }
 
   .sidebar__folder-count {

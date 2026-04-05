@@ -79,6 +79,15 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /**
+   * Modal max height: prefer viewport (92vh) when the window is tall; pixel cap avoids
+   * excessive height on huge monitors. Backdrop padding is already inside the vh box.
+   */
+  --modal-max-height: min(92vh, 820px);
+  --modal-max-height-lg: min(92vh, 940px);
+  /** Wider dialogs (e.g. metadata matches): grow with the window up to a cap */
+  --modal-width-wide: min(640px, 94vw, 100%);
+
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);

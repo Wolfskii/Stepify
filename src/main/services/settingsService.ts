@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppSettings, LibraryDirectory } from '../../shared/types'
+import type { AppSettings, DanceId, LibraryDirectory } from '../../shared/types'
 
 const DEFAULT_SETTINGS: AppSettings = {
   libraryDirectories: [],
@@ -51,5 +51,25 @@ export const settingsService = {
   removeLibraryDirectory(path: string): void {
     const dirs = this.getLibraryDirectories().filter((d) => d.path !== path)
     store.set('libraryDirectories', dirs)
+  },
+
+  /** Persist default dance for a folder, or clear it when `danceId` is null. */
+  setLibraryFolderDefaultDance(dirPath: string, danceId: DanceId | null): boolean {
+    const dirs = this.getLibraryDirectories()
+    const idx = dirs.findIndex((d) => d.path === dirPath)
+    if (idx < 0) return false
+    const next = dirs.map((d, i) => {
+      if (i !== idx) return d
+      if (danceId == null) {
+        return {
+          path: d.path,
+          dateAdded: d.dateAdded,
+          trackCount: d.trackCount,
+        }
+      }
+      return { ...d, defaultDanceId: danceId }
+    })
+    store.set('libraryDirectories', next)
+    return true
   },
 }

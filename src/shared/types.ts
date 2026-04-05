@@ -53,12 +53,51 @@ export interface Track {
   /** User-defined tags */
   tags?: string[]
   dateAdded: number
+  /** File had no embedded title tag (display title may be the filename). */
+  missingEmbeddedTitle?: boolean
+  /** File had no embedded artist / performer tag. */
+  missingEmbeddedArtist?: boolean
+  /** File had no usable embedded cover art. */
+  missingEmbeddedArt?: boolean
+  /** Last known source file mtime (ms); used to skip re-parsing unchanged files on rescan. */
+  fileMtimeMs?: number
+}
+
+/** One row from online metadata search (e.g. iTunes). */
+export interface MetadataSearchHit {
+  title: string
+  artist: string
+  album?: string
+  artworkUrl: string
+  sourceLabel: string
+}
+
+export interface UpdateTrackMetadataPayload {
+  trackId: string
+  title: string
+  artist: string
+  album?: string
+  /** Remote artwork URL (main process fetches and embeds when supported) */
+  coverImageUrl?: string
+  /** data:image/...;base64,... from a user-selected image file */
+  coverDataUrl?: string
 }
 
 export interface LibraryDirectory {
   path: string
   dateAdded: number
   trackCount: number
+  /** New files discovered under this folder get this dance on scan (optional). */
+  defaultDanceId?: DanceId
+}
+
+/** Result shape for rescan / folder watcher / add-folder scan (renderer + IPC). */
+export interface LibraryDiskSyncPayload {
+  tracks: Track[]
+  newTrackIds: string[]
+  removedTrackIds: string[]
+  /** Tracks re-read from disk whose list/playback-relevant fields changed. */
+  changedTrackIds: string[]
 }
 
 // ─── Playback ─────────────────────────────────────────────────────────────────

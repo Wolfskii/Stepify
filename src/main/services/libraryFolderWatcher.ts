@@ -28,9 +28,15 @@ async function runDebouncedSync(): Promise<void> {
   if (syncInFlight) return
   syncInFlight = true
   try {
-    const { tracks, newTrackIds } = await libraryService.rescanAll()
+    const { tracks, newTrackIds, removedTrackIds, changedTrackIds } =
+      await libraryService.rescanAll()
     if (!win.isDestroyed()) {
-      win.webContents.send(IPC_LIBRARY.SCAN_COMPLETE, { tracks, newTrackIds })
+      win.webContents.send(IPC_LIBRARY.SCAN_COMPLETE, {
+        tracks,
+        newTrackIds,
+        removedTrackIds,
+        changedTrackIds,
+      })
     }
   } finally {
     syncInFlight = false

@@ -1,8 +1,17 @@
 import { DANCE_CATEGORIES, DANCE_CATEGORIES_BY_ID } from '@shared/constants'
-import type { DanceId, LibraryDirectory, Track } from '@shared/types'
+import type { DanceId, LibraryDirectory, LibraryDiskSyncPayload, Track } from '@shared/types'
 import { derived, get, writable } from 'svelte/store'
 import { resolveBpmForLocalTrack } from '../services/bpmAnalysis'
+import { trackNeedsMetadataEnrichment } from '../utils/metadataQuery'
 import { uiActions } from './ui.store'
+
+/** Whether a local file path lies under a library root (normalized slash comparison). */
+function trackFileUnderLibraryFolder(filePath: string, dirPath: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '')
+  const f = norm(filePath)
+  const d = norm(dirPath)
+  return f === d || f.startsWith(`${d}/`)
+}
 
 interface LibraryState {
   tracks: Track[]
@@ -155,14 +164,44 @@ export const libraryActions = {
         }
         return
       }
+      const { playerActions } = await import('./player.store')
+      const removed = r.data.removedTrackIds ?? []
+      if (removed.length > 0) {
+        libraryActions.removeTracksFromState(removed)
+        playerActions.onLibraryRemovedTracks(removed)
+      }
       libraryActions.mergeTracksFromScan(r.data.tracks)
       await libraryActions.refreshLibraryDirectories()
+      for (const id of r.data.changedTrackIds ?? []) {
+        const t = get(libraryState).tracks.find((x) => x.id === id)
+        if (t) playerActions.mergeTrackFromLibrary(t)
+      }
       const n = r.data.newTrackIds.length
+      const touched =
+        n > 0 || removed.length > 0 || (r.data.changedTrackIds?.length ?? 0) > 0
       if (n > 0) {
-        uiActions.openModal('assign-folder-dance', { folderTrackIds: r.data.newTrackIds })
         uiActions.notify(`Added ${n} new ${n === 1 ? 'track' : 'tracks'}`, 'success')
-        void libraryActions.fillMissingBpmForTrackIds(r.data.newTrackIds)
-      } else {
+        const idSet = new Set(r.data.newTrackIds)
+        const incomplete = r.data.tracks
+          .filter((t) => idSet.has(t.id))
+          .filter(trackNeedsMetadataEnrichment)
+          .map((t) => t.id)
+        if (incomplete.length > 0) {
+          uiActions.openModal('track-metadata', {
+            metadataQueue: incomplete,
+            metadataWizardTotal: incomplete.length,
+            metadataAfterAssign: r.data.newTrackIds,
+          })
+        } else {
+          const needDance = r.data.tracks
+            .filter((t) => idSet.has(t.id) && t.dances.length === 0)
+            .map((t) => t.id)
+          if (needDance.length > 0) {
+            uiActions.openModal('assign-folder-dance', { folderTrackIds: needDance })
+          }
+          void libraryActions.fillMissingBpmForTrackIds(r.data.newTrackIds)
+        }
+      } else if (!touched) {
         uiActions.notify('Folder is already fully indexed', 'info')
       }
     } finally {
@@ -236,6 +275,34 @@ export const libraryActions = {
         selectionAnchorIndex: index,
       }
     })
+  },
+
+  async applyFolderDefaultDance(path: string, danceId: DanceId) {
+    const r = await window.electronAPI.library.setFolderDefaultDance(path, danceId)
+    if (!r.success) {
+      uiActions.notify(r.error ?? 'Could not save folder default', 'error')
+      return
+    }
+    await libraryActions.refreshLibraryDirectories()
+    const ids = get(libraryState).tracks
+      .filter((t) => t.localPath && trackFileUnderLibraryFolder(t.localPath, path))
+      .map((t) => t.id)
+    if (ids.length > 0) {
+      await libraryActions.assignDanceToTracks(ids, danceId)
+    } else {
+      const name = DANCE_CATEGORIES_BY_ID[danceId]?.name ?? danceId
+      uiActions.notify(`New files in this folder will use “${name}”.`, 'success')
+    }
+  },
+
+  async clearFolderDefaultDance(path: string) {
+    const r = await window.electronAPI.library.setFolderDefaultDance(path, null)
+    if (!r.success) {
+      uiActions.notify(r.error ?? 'Could not update folder', 'error')
+      return
+    }
+    await libraryActions.refreshLibraryDirectories()
+    uiActions.notify('Automatic dance assignment is off for this folder.', 'info')
   },
 
   async assignDanceToTracks(trackIds: string[], danceId: DanceId) {
@@ -417,20 +484,61 @@ export const libraryActions = {
    * Apply a disk rescan result from main (startup sync, folder watcher, or manual rescan).
    */
   async applyDiskSyncFromMain(
-    data: { tracks: Track[]; newTrackIds: string[] },
+    data: LibraryDiskSyncPayload,
     source: 'startup' | 'file-watcher' | 'manual-rescan',
   ) {
+    const { playerActions } = await import('./player.store')
+    const removed = data.removedTrackIds
+    if (removed.length > 0) {
+      libraryActions.removeTracksFromState(removed)
+      playerActions.onLibraryRemovedTracks(removed)
+    }
     libraryActions.mergeTracksFromScan(data.tracks)
     await libraryActions.refreshLibraryDirectories()
-    const n = data.newTrackIds.length
+    for (const id of data.changedTrackIds ?? []) {
+      const t = get(libraryState).tracks.find((x) => x.id === id)
+      if (t) playerActions.mergeTrackFromLibrary(t)
+    }
+
+    const newTrackIds = data.newTrackIds
+    const n = newTrackIds.length
     if (n === 0) return
 
-    if (source !== 'file-watcher') {
-      uiActions.openModal('assign-folder-dance', { folderTrackIds: data.newTrackIds })
+    const idSet = new Set(newTrackIds)
+    const newTracks = data.tracks.filter((t) => idSet.has(t.id))
+    const incompleteMeta = newTracks.filter(trackNeedsMetadataEnrichment).map((t) => t.id)
+
+    if (incompleteMeta.length > 0) {
+      uiActions.openModal('track-metadata', {
+        metadataQueue: incompleteMeta,
+        metadataWizardTotal: incompleteMeta.length,
+        metadataAfterAssign: newTrackIds,
+      })
+      if (source === 'startup') {
+        uiActions.notify(
+          n === 1
+            ? 'Found 1 new track in library folders'
+            : `Found ${n} new tracks in library folders`,
+          'success',
+        )
+      } else if (source === 'file-watcher') {
+        uiActions.notify(
+          n === 1
+            ? '1 new track added from a library folder'
+            : `${n} new tracks added from library folders`,
+          'success',
+        )
+      }
+      return
+    }
+
+    const needAssign = newTracks.filter((t) => t.dances.length === 0).map((t) => t.id)
+    if (source !== 'file-watcher' && needAssign.length > 0) {
+      uiActions.openModal('assign-folder-dance', { folderTrackIds: needAssign })
     }
 
     const silentBpm = source === 'file-watcher' || source === 'startup'
-    void libraryActions.fillMissingBpmForTrackIds(data.newTrackIds, { silentBpmToast: silentBpm })
+    void libraryActions.fillMissingBpmForTrackIds(newTrackIds, { silentBpmToast: silentBpm })
 
     if (source === 'startup') {
       uiActions.notify(
@@ -446,6 +554,27 @@ export const libraryActions = {
           : `${n} new tracks added from library folders`,
         'success',
       )
+    }
+  },
+
+  async syncTrackFromMain(track: Track) {
+    libraryState.update((s) => ({
+      ...s,
+      tracks: s.tracks.map((t) => (t.id === track.id ? { ...t, ...track } : t)),
+    }))
+    const { playerActions } = await import('./player.store')
+    playerActions.mergeTrackFromLibrary(track)
+  },
+
+  /** After metadata wizard: BPM pass + bulk dance assign for newly added folder tracks. */
+  async afterMetadataWizardComplete(trackIds: string[]) {
+    if (trackIds.length === 0) return
+    void libraryActions.fillMissingBpmForTrackIds(trackIds)
+    const need = get(libraryState).tracks
+      .filter((t) => trackIds.includes(t.id) && t.dances.length === 0)
+      .map((t) => t.id)
+    if (need.length > 0) {
+      uiActions.openModal('assign-folder-dance', { folderTrackIds: need })
     }
   },
 }

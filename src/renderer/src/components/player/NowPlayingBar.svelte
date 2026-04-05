@@ -11,6 +11,7 @@ import {
   listenerDuration,
 } from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
+import { uiActions } from '../../stores/ui.store'
 import { onMount, onDestroy } from 'svelte'
 import type { RepeatMode } from '@shared/types'
 
@@ -286,6 +287,11 @@ function repeatAria(mode: RepeatMode): string {
   return 'Repeat off'
 }
 
+function openTrackMetadataFromBar() {
+  const t = $currentTrack
+  if (t) uiActions.openModal('track-metadata', { trackId: t.id })
+}
+
 let unsubTimeUpdate: () => void
 let unsubEnded: () => void
 let unsubLoaded: () => void
@@ -320,10 +326,14 @@ onDestroy(() => {
   <div class="now-playing-bar__inner">
     <!-- Fixed-width track info: does not shrink or get covered when the seek row is wide. -->
     <div class="now-playing-bar__left">
-      <div
-        class="now-playing-bar__art"
+      <button
+        type="button"
+        class="now-playing-bar__art now-playing-bar__art--btn"
         class:now-playing-bar__art--dim={!$currentTrack}
-        aria-hidden="true"
+        disabled={!$currentTrack}
+        title={$currentTrack ? 'Edit artwork and track details' : undefined}
+        aria-label={$currentTrack ? 'Edit artwork and track details' : 'No track selected'}
+        on:click={openTrackMetadataFromBar}
       >
         {#if $currentTrack?.artworkUrl}
           <img src={$currentTrack.artworkUrl} alt="" />
@@ -342,7 +352,7 @@ onDestroy(() => {
             </svg>
           </div>
         {/if}
-      </div>
+      </button>
       <div class="now-playing-bar__meta">
         {#if $currentTrack}
           <div class="now-playing-bar__title truncate">{$currentTrack.title}</div>
@@ -629,6 +639,35 @@ onDestroy(() => {
     background: var(--color-bg-overlay);
     flex-shrink: 0;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  }
+
+  .now-playing-bar__art--btn {
+    padding: 0;
+    border: none;
+    display: block;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition:
+      box-shadow var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .now-playing-bar__art--btn:hover:not(:disabled) {
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.45),
+      0 0 0 2px var(--color-accent);
+    filter: brightness(1.06);
+  }
+
+  .now-playing-bar__art--btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .now-playing-bar__art--btn:disabled {
+    cursor: default;
   }
 
   .now-playing-bar__art--dim {

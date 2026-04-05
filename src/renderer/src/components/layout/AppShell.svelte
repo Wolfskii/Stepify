@@ -8,6 +8,7 @@ import Notifications from './Notifications.svelte'
 import AssignDanceModal from '../modals/AssignDanceModal.svelte'
 import AssignFolderDanceModal from '../modals/AssignFolderDanceModal.svelte'
 import EditBpmModal from '../modals/EditBpmModal.svelte'
+import TrackMetadataModal from '../modals/TrackMetadataModal.svelte'
 </script>
 
 <div class="app-shell">
@@ -29,6 +30,7 @@ import EditBpmModal from '../modals/EditBpmModal.svelte'
   <AssignDanceModal />
   <AssignFolderDanceModal />
   <EditBpmModal />
+  <TrackMetadataModal />
 </div>
 
 <style>

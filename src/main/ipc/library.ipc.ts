@@ -1,15 +1,24 @@
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC_LIBRARY } from '../../shared/ipc-channels'
-import type { DanceId, IpcResponse, LibraryDirectory, Track } from '../../shared/types'
+import type {
+  DanceId,
+  IpcResponse,
+  LibraryDirectory,
+  LibraryDiskSyncPayload,
+  MetadataSearchHit,
+  Track,
+  UpdateTrackMetadataPayload,
+} from '../../shared/types'
 import { restartLibraryFolderWatcher } from '../services/libraryFolderWatcher'
 import { libraryService } from '../services/libraryService'
+import { searchTrackMetadataOnline } from '../services/metadataSearchService'
 import { writeBpmToAudioFile } from '../services/metadataBpmWriter'
 import { settingsService } from '../services/settingsService'
 
 export function registerLibraryIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     IPC_LIBRARY.ADD_DIRECTORY,
-    async (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> => {
+    async (): Promise<IpcResponse<LibraryDiskSyncPayload>> => {
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory', 'multiSelections'],
         title: 'Add Music Directory',
@@ -21,6 +30,8 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
 
       const allTracks: Track[] = []
       const allNewIds: string[] = []
+      const allRemovedIds: string[] = []
+      const allChangedIds: string[] = []
 
       for (const dirPath of result.filePaths) {
         settingsService.addLibraryDirectory({
@@ -29,15 +40,15 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
           trackCount: 0,
         })
 
-        const { tracks, newTrackIds } = await libraryService.scanDirectory(
-          dirPath,
-          (current, total) => {
+        const { tracks, newTrackIds, removedTrackIds, changedTrackIds } =
+          await libraryService.scanDirectory(dirPath, (current, total) => {
             mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
-          },
-        )
+          })
 
         allTracks.push(...tracks)
         allNewIds.push(...newTrackIds)
+        allRemovedIds.push(...removedTrackIds)
+        allChangedIds.push(...changedTrackIds)
 
         settingsService.set({
           libraryDirectories: settingsService
@@ -47,10 +58,15 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
       }
 
       const newTrackIds = [...new Set(allNewIds)]
+      const removedTrackIds = [...new Set(allRemovedIds)]
+      const changedTrackIds = [...new Set(allChangedIds)]
 
       restartLibraryFolderWatcher(mainWindow)
 
-      return { success: true, data: { tracks: allTracks, newTrackIds } }
+      return {
+        success: true,
+        data: { tracks: allTracks, newTrackIds, removedTrackIds, changedTrackIds },
+      }
     },
   )
 
@@ -77,6 +93,18 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
     async (): Promise<IpcResponse<LibraryDirectory[]>> => {
       const dirs = settingsService.getLibraryDirectories()
       return { success: true, data: dirs }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_LIBRARY.SET_FOLDER_DEFAULT_DANCE,
+    async (
+      _event,
+      dirPath: string,
+      danceId: DanceId | null,
+    ): Promise<IpcResponse<void>> => {
+      const ok = settingsService.setLibraryFolderDefaultDance(dirPath, danceId)
+      return ok ? { success: true } : { success: false, error: 'Folder not found' }
     },
   )
 
@@ -108,7 +136,7 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     IPC_LIBRARY.RESCAN,
-    async (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> => {
+    async (): Promise<IpcResponse<LibraryDiskSyncPayload>> => {
       const data = await libraryService.rescanAll((current, total) => {
         mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
       })
@@ -152,6 +180,32 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
     async (_event, trackId: string): Promise<IpcResponse<void>> => {
       const ok = libraryService.clearTrackBpm(trackId)
       return ok ? { success: true } : { success: false, error: 'Track not found' }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_LIBRARY.SEARCH_TRACK_METADATA,
+    async (_event, query: string): Promise<IpcResponse<MetadataSearchHit[]>> => {
+      try {
+        const data = await searchTrackMetadataOnline(query)
+        return { success: true, data }
+      } catch (err) {
+        return { success: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_LIBRARY.UPDATE_TRACK_METADATA,
+    async (
+      _event,
+      payload: UpdateTrackMetadataPayload,
+    ): Promise<IpcResponse<Track>> => {
+      const r = await libraryService.applyTrackMetadata(payload.trackId, payload)
+      if (!r.ok || !r.track) {
+        return { success: false, error: r.error ?? 'Update failed' }
+      }
+      return { success: true, data: r.track }
     },
   )
 

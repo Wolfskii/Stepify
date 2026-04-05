@@ -11,8 +11,11 @@ import type {
   DanceId,
   IpcResponse,
   LibraryDirectory,
+  LibraryDiskSyncPayload,
+  MetadataSearchHit,
   SpotifyTrackResult,
   Track,
+  UpdateTrackMetadataPayload,
 } from '../shared/types'
 
 /**
@@ -24,7 +27,7 @@ const api = {
   // ─── Library ──────────────────────────────────────────────────────────────
 
   library: {
-    addDirectory: (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> =>
+    addDirectory: (): Promise<IpcResponse<LibraryDiskSyncPayload>> =>
       ipcRenderer.invoke(IPC_LIBRARY.ADD_DIRECTORY),
 
     removeDirectory: (path: string): Promise<IpcResponse<{ removedTrackIds: string[] }>> =>
@@ -36,6 +39,12 @@ const api = {
     getDirectories: (): Promise<IpcResponse<LibraryDirectory[]>> =>
       ipcRenderer.invoke(IPC_LIBRARY.GET_DIRECTORIES),
 
+    setFolderDefaultDance: (
+      dirPath: string,
+      danceId: DanceId | null,
+    ): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.SET_FOLDER_DEFAULT_DANCE, dirPath, danceId),
+
     getTracks: (danceId?: DanceId): Promise<IpcResponse<Track[]>> =>
       ipcRenderer.invoke(IPC_LIBRARY.GET_TRACKS, danceId),
 
@@ -45,7 +54,7 @@ const api = {
     unassignDance: (trackId: string, danceId: DanceId): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.UNASSIGN_DANCE, trackId, danceId),
 
-    rescan: (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> =>
+    rescan: (): Promise<IpcResponse<LibraryDiskSyncPayload>> =>
       ipcRenderer.invoke(IPC_LIBRARY.RESCAN),
 
     saveDetectedBpm: (payload: {
@@ -60,7 +69,15 @@ const api = {
     clearTrackBpm: (trackId: string): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.CLEAR_TRACK_BPM, trackId),
 
-    onScanComplete: (callback: (payload: { tracks: Track[]; newTrackIds: string[] }) => void) => {
+    searchTrackMetadata: (query: string): Promise<IpcResponse<MetadataSearchHit[]>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.SEARCH_TRACK_METADATA, query),
+
+    updateTrackMetadata: (
+      payload: UpdateTrackMetadataPayload,
+    ): Promise<IpcResponse<Track>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.UPDATE_TRACK_METADATA, payload),
+
+    onScanComplete: (callback: (payload: LibraryDiskSyncPayload) => void) => {
       ipcRenderer.on(IPC_LIBRARY.SCAN_COMPLETE, (_event, payload) => callback(payload))
     },
 

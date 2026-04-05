@@ -60,6 +60,10 @@ function openEditBpm() {
   uiActions.openModal('edit-bpm', { trackId: track.id })
 }
 
+function openTrackMetadata() {
+  uiActions.openModal('track-metadata', { trackId: track.id })
+}
+
 async function removeFromCurrentDance() {
   if (!filterDanceId) return
   await libraryActions.unassignTracksFromDance([track.id], filterDanceId)
@@ -138,7 +142,13 @@ function onDragStart(e: DragEvent) {
     </div>
 
     <div class="track-item__title-group">
-      <div class="track-item__art" aria-hidden="true">
+      <button
+        type="button"
+        class="track-item__art track-item__art--btn"
+        title="Edit title, artist, or cover art"
+        aria-label="Edit artwork and details for {track.title}"
+        on:click|stopPropagation={openTrackMetadata}
+      >
         {#if track.artworkUrl}
           <img
             src={track.artworkUrl}
@@ -163,7 +173,7 @@ function onDragStart(e: DragEvent) {
             </svg>
           </div>
         {/if}
-      </div>
+      </button>
 
       <div class="track-item__info">
         <span class="track-item__title truncate">{track.title}</span>
@@ -299,6 +309,29 @@ function onDragStart(e: DragEvent) {
     overflow: hidden;
     background: var(--color-bg-overlay);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .track-item__art--btn {
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition:
+      box-shadow var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out);
+  }
+
+  .track-item__art--btn:hover {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 0 2px var(--color-accent);
+    filter: brightness(1.08);
+  }
+
+  .track-item__art--btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .track-item__art img {
