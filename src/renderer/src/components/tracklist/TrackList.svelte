@@ -36,7 +36,6 @@ onMount(() => {
 $: selectedDance = $selectedDanceId ? DANCE_CATEGORIES_BY_ID[$selectedDanceId] : null
 $: headingText = selectedDance ? selectedDance.name : 'All Tracks'
 $: bpmLabel = selectedDance ? `${selectedDance.bpmRange[0]}–${selectedDance.bpmRange[1]} BPM` : ''
-
 function addDirectory() {
   void libraryActions.pickAddMusicFolder()
 }
@@ -119,8 +118,10 @@ function onTrackListBackgroundClick(e: MouseEvent) {
         <div role="columnheader" class="track-list__col track-list__col--index">#</div>
         <div role="columnheader" class="track-list__col track-list__col--title-block">Title</div>
       </div>
-      <div class="track-list__meta-cols">
-        <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
+      <div class="track-list__meta-cols" class:track-list__meta-cols--no-dance={$selectedDanceId}>
+        {#if !$selectedDanceId}
+          <div role="columnheader" class="track-list__col track-list__col--dance">Dance</div>
+        {/if}
         <div role="columnheader" class="track-list__col track-list__col--bpm">BPM</div>
         <div
           role="columnheader"
@@ -164,9 +165,10 @@ function onTrackListBackgroundClick(e: MouseEvent) {
           <p class="track-list__hint">
             From <strong>All Tracks</strong>: drag rows onto a dance in the sidebar, or use
             <strong>Ctrl/Cmd+click</strong> / <strong>Shift+click</strong> to select several, then drag
-            onto a dance. You can also click the <strong>None</strong> badge or a dance tag on a row to
-            set or change the dance. Use <strong>−</strong> on a row or <strong>Delete</strong> /
-            <strong>Backspace</strong> on a selection to remove tracks from this dance only.
+            onto a dance. You can also use the dance column on each row there to set or change the dance.
+            On this screen, use the <strong>tag</strong> icon on a row to change dance, and
+            <strong>−</strong> or <strong>Delete</strong> / <strong>Backspace</strong> to remove from this
+            dance only.
           </p>
         {:else}
           <p>Your library is empty.</p>
@@ -290,6 +292,10 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     flex-shrink: 0;
     min-width: 0;
     justify-items: start;
+  }
+
+  .track-list__meta-cols--no-dance {
+    grid-template-columns: 76px 52px 58px;
   }
 
   .track-list__col {

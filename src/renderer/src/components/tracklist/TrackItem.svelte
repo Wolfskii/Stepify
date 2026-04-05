@@ -182,31 +182,37 @@ function onDragStart(e: DragEvent) {
     </div>
   </div>
 
-  <div class="track-item__meta" role="gridcell">
-    <div class="track-item__dances">
-      {#if primaryDance}
-        <button
-          type="button"
-          class="dance-tag dance-tag--btn"
-          style="--dance-color: {primaryDance.color}"
-          title="Change dance"
-          aria-label="Change dance for {track.title}"
-          on:click|stopPropagation={openAssignDance}
-        >
-          {primaryDance.name}
-        </button>
-      {:else}
-        <button
-          type="button"
-          class="dance-tag dance-tag--btn dance-tag--none"
-          title="Set dance"
-          aria-label="No dance set — choose a dance for {track.title}"
-          on:click|stopPropagation={openAssignDance}
-        >
-          None
-        </button>
-      {/if}
-    </div>
+  <div
+    class="track-item__meta"
+    class:track-item__meta--no-dance={filterDanceId}
+    role="gridcell"
+  >
+    {#if !filterDanceId}
+      <div class="track-item__dances">
+        {#if primaryDance}
+          <button
+            type="button"
+            class="dance-tag dance-tag--btn"
+            style="--dance-color: {primaryDance.color}"
+            title="Change dance"
+            aria-label="Change dance for {track.title}"
+            on:click|stopPropagation={openAssignDance}
+          >
+            {primaryDance.name}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="dance-tag dance-tag--btn dance-tag--none"
+            title="Set dance"
+            aria-label="No dance set — choose a dance for {track.title}"
+            on:click|stopPropagation={openAssignDance}
+          >
+            None
+          </button>
+        {/if}
+      </div>
+    {/if}
 
     {#if track.bpm}
       <button
@@ -236,11 +242,33 @@ function onDragStart(e: DragEvent) {
     </div>
 
     <div class="track-item__actions">
+    {#if filterDanceId}
+      <button
+        type="button"
+        class="track-item__action-btn"
+        on:click|stopPropagation={openAssignDance}
+        title="Change dance"
+        aria-label="Change dance for {track.title}"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle cx="7" cy="7" r="1.25" fill="currentColor" />
+        </svg>
+      </button>
+    {/if}
     {#if filterDanceId && track.dances.includes(filterDanceId)}
       <button
+        type="button"
         class="track-item__action-btn"
         on:click|stopPropagation={removeFromCurrentDance}
         title="Remove from this dance"
+        aria-label="Remove {track.title} from this dance"
       >
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -249,6 +277,7 @@ function onDragStart(e: DragEvent) {
     {/if}
     {#if !filterDanceId && primaryDanceId}
       <button
+        type="button"
         class="track-item__action-btn"
         on:click|stopPropagation={clearDanceTagOnAllTracks}
         title="Clear dance tag"
@@ -360,6 +389,11 @@ function onDragStart(e: DragEvent) {
     min-width: 0;
     justify-items: start;
     cursor: default;
+  }
+
+  /* Single-dance list: no dance column; room for tag + remove actions */
+  .track-item__meta--no-dance {
+    grid-template-columns: 76px 52px 58px;
   }
 
   .track-item__meta :is(button, .dance-tag--btn) {
