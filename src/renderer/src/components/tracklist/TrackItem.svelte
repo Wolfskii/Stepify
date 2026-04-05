@@ -11,7 +11,7 @@ const TRACK_DRAG_MIME = 'application/x-stepify-tracks'
 export let track: Track
 export let index: number
 export let queue: Track[]
-/** When set (dance filter view), show remove-from-this-dance control */
+/** When set (dance filter view), meta shows BPM/time + a dance label control that opens Set dance (incl. None). */
 export let filterDanceId: DanceId | null = null
 /** When set (folder filter view), scope “now playing” row to that list */
 export let filterFolderPath: string | null = null
@@ -82,17 +82,8 @@ function openTrackMetadata() {
   uiActions.openModal('track-metadata', { trackId: track.id })
 }
 
-async function removeFromCurrentDance() {
-  if (!filterDanceId) return
-  await libraryActions.unassignTracksFromDance([track.id], filterDanceId)
-}
-
-async function clearDanceTagOnAllTracks() {
-  if (!primaryDanceId) return
-  await libraryActions.unassignTracksFromDance([track.id], primaryDanceId)
-}
-
 $: primaryDanceId = track.dances[0]
+$: filterDanceMeta = filterDanceId ? DANCE_CATEGORIES_BY_ID[filterDanceId] : null
 $: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
 
 function onRowClick(e: MouseEvent) {
@@ -259,54 +250,30 @@ function onDragStart(e: DragEvent) {
       {formatDuration(track.duration)}
     </div>
 
-    <div class="track-item__actions">
-    {#if filterDanceId}
-      <button
-        type="button"
-        class="track-item__action-btn"
-        on:click|stopPropagation={openAssignDance}
-        title="Change dance"
-        aria-label="Change dance for {track.title}"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
-            stroke="currentColor"
-            stroke-width="1.75"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-          <circle cx="7" cy="7" r="1.25" fill="currentColor" />
-        </svg>
-      </button>
+    {#if filterDanceId && filterDanceMeta}
+      <div class="track-item__actions">
+        <button
+          type="button"
+          class="track-item__dance-change-btn"
+          style="--dance-color: {filterDanceMeta.color}"
+          on:click|stopPropagation={openAssignDance}
+          title="Change dance or set to none"
+          aria-label="Change dance for {track.title}"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="track-item__dance-change-icon" aria-hidden="true">
+            <path
+              d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <circle cx="7" cy="7" r="1.25" fill="currentColor" />
+          </svg>
+          <span class="track-item__dance-change-label truncate">{filterDanceMeta.name}</span>
+        </button>
+      </div>
     {/if}
-    {#if filterDanceId && track.dances.includes(filterDanceId)}
-      <button
-        type="button"
-        class="track-item__action-btn"
-        on:click|stopPropagation={removeFromCurrentDance}
-        title="Remove from this dance"
-        aria-label="Remove {track.title} from this dance"
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
-    {/if}
-    {#if !filterDanceId && primaryDanceId}
-      <button
-        type="button"
-        class="track-item__action-btn"
-        on:click|stopPropagation={clearDanceTagOnAllTracks}
-        title="Clear dance tag"
-        aria-label="Clear dance tag for {track.title}"
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
-    {/if}
-    </div>
   </div>
 </div>
 
@@ -401,17 +368,17 @@ function onDragStart(e: DragEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    /* Dance · BPM · time — keep tight; actions only need one 26px button */
-    grid-template-columns: minmax(72px, 152px) 76px 52px 32px;
+    /* Dance · BPM · time — keep tight; actions column fits dance pill or label+tag control */
+    grid-template-columns: minmax(72px, 152px) 76px 52px;
     flex-shrink: 0;
     min-width: 0;
     justify-items: start;
     cursor: default;
   }
 
-  /* Single-dance list: no dance column; room for tag + remove actions */
+  /* Single-dance list: no dance column; BPM · time · dance label + tag */
   .track-item__meta--no-dance {
-    grid-template-columns: 76px 52px 58px;
+    grid-template-columns: 76px 52px minmax(108px, 172px);
   }
 
   .track-item__meta :is(button, .dance-tag--btn) {
@@ -692,6 +659,42 @@ function onDragStart(e: DragEvent) {
   }
 
   /* Actions — narrow column, hug right edge of row */
+  .track-item__dance-change-btn {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--dance-color) 38%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--dance-color) 12%, var(--color-bg-elevated));
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .track-item__dance-change-btn:hover {
+    background: color-mix(in srgb, var(--dance-color) 20%, var(--color-bg-overlay));
+    color: var(--color-text-primary);
+    border-color: color-mix(in srgb, var(--dance-color) 50%, var(--color-border));
+  }
+
+  .track-item__dance-change-icon {
+    flex-shrink: 0;
+    color: color-mix(in srgb, var(--dance-color) 85%, var(--color-text-muted));
+  }
+
+  .track-item__dance-change-label {
+    min-width: 0;
+  }
+
   .track-item__actions {
     display: flex;
     align-items: center;

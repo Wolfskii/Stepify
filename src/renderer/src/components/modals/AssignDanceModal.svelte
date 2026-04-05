@@ -1,6 +1,7 @@
 <script lang="ts">
+import { get } from 'svelte/store'
 import { activeModal, assignDanceTrackId, uiActions } from '../../stores/ui.store'
-import { libraryActions } from '../../stores/library.store'
+import { libraryActions, libraryState } from '../../stores/library.store'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import { orderedDanceCategories } from '../../stores/danceOrder.store'
 import type { DanceId } from '@shared/types'
@@ -16,6 +17,30 @@ async function pick(danceId: DanceId) {
     uiActions.notify(`Assigned to ${name}`, 'success')
   } else {
     uiActions.notify(r.error ?? 'Assign failed', 'error')
+  }
+}
+
+async function pickNone() {
+  const tid = $assignDanceTrackId
+  if (!tid) return
+  const track = get(libraryState).tracks.find((t) => t.id === tid)
+  if (!track || track.dances.length === 0) {
+    uiActions.closeModal()
+    return
+  }
+  let ok = 0
+  for (const danceId of [...track.dances]) {
+    const r = await window.electronAPI.library.unassignDance(tid, danceId)
+    if (r.success) {
+      libraryActions.updateTrackDance(tid, danceId, false)
+      ok++
+    }
+  }
+  uiActions.closeModal()
+  if (ok > 0) {
+    uiActions.notify('Dance cleared', 'success')
+  } else {
+    uiActions.notify('Could not clear dance', 'warning')
   }
 }
 
@@ -41,7 +66,10 @@ function close() {
       on:click|stopPropagation
     >
       <h2 id="assign-dance-title" class="modal__title">Set dance</h2>
-      <p class="modal__hint">One dance per track — this replaces any previous tag.</p>
+      <p class="modal__hint">
+        One dance per track — choosing a style replaces any previous tag. Use <strong>None</strong> to leave the
+        track untagged (same idea as “no automatic assignment” for a folder).
+      </p>
       <div class="modal__grid">
         {#each $orderedDanceCategories as d}
           <button
@@ -54,6 +82,7 @@ function close() {
           </button>
         {/each}
       </div>
+      <button type="button" class="modal__none" on:click={pickNone}>None (no dance)</button>
       <button type="button" class="modal__cancel" on:click={close}>Cancel</button>
     </div>
   </div>
@@ -98,7 +127,28 @@ function close() {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-2);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
+  }
+
+  .modal__none {
+    width: 100%;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    margin-bottom: var(--space-3);
+    transition:
+      color var(--duration-fast),
+      border-color var(--duration-fast),
+      background var(--duration-fast);
+  }
+
+  .modal__none:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-muted);
   }
 
   .modal__dance {

@@ -232,7 +232,9 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             />
           </svg>
         </div>
-        <div role="columnheader" class="track-list__col track-list__col--actions" aria-hidden="true"></div>
+        {#if $selectedDanceId}
+          <div role="columnheader" class="track-list__col track-list__col--actions" aria-hidden="true"></div>
+        {/if}
       </div>
     </div>
   {/if}
@@ -252,9 +254,9 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             From <strong>All Tracks</strong>: drag rows onto a dance in the sidebar, or use
             <strong>Ctrl/Cmd+click</strong> / <strong>Shift+click</strong> to select several, then drag
             onto a dance. You can also use the dance column on each row there to set or change the dance.
-            On this screen, use the <strong>tag</strong> icon on a row to change dance, and
-            <strong>−</strong> or <strong>Delete</strong> / <strong>Backspace</strong> to remove from this
-            dance only.
+            On this screen, use the <strong>dance label</strong> on each row to change dance or set
+            <strong>None</strong>. <strong>Delete</strong> / <strong>Backspace</strong> still removes the
+            selected tracks from this dance only.
           </p>
         {:else if $selectedFolderPath}
           <p>No tracks in this folder yet.</p>
@@ -469,14 +471,14 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     display: grid;
     column-gap: var(--space-3);
     align-items: center;
-    grid-template-columns: minmax(72px, 152px) 76px 52px 32px;
+    grid-template-columns: minmax(72px, 152px) 76px 52px;
     flex-shrink: 0;
     min-width: 0;
     justify-items: start;
   }
 
   .track-list__meta-cols--no-dance {
-    grid-template-columns: 76px 52px 58px;
+    grid-template-columns: 76px 52px minmax(108px, 172px);
   }
 
   .track-list__col {
