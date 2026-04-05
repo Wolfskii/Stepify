@@ -1,0 +1,98 @@
+version: '3'
+
+# Stepify — Task Runner
+# Install go-task: https://taskfile.dev/installation/
+# Usage: task <command>
+
+vars:
+  APP_NAME: Stepify
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install all npm dependencies
+    cmds:
+      - npm install
+    sources:
+      - package.json
+    generates:
+      - node_modules/.package-lock.json
+
+  dev:
+    desc: Start Electron app in development mode with hot reload
+    deps: [install]
+    cmds:
+      - npm run dev
+    env:
+      NODE_ENV: development
+
+  build:
+    desc: Build the app for the current platform
+    deps: [typecheck, lint]
+    cmds:
+      - npm run build
+
+  build:win:
+    desc: Build Windows installer (NSIS)
+    deps: [typecheck]
+    cmds:
+      - npm run build:win
+
+  build:mac:
+    desc: Build macOS DMG
+    deps: [typecheck]
+    cmds:
+      - npm run build:mac
+
+  build:linux:
+    desc: Build Linux AppImage
+    deps: [typecheck]
+    cmds:
+      - npm run build:linux
+
+  preview:
+    desc: Preview the built Electron app without packaging
+    cmds:
+      - npm run preview
+
+  typecheck:
+    desc: Run TypeScript type checking across all tsconfigs (no emit)
+    cmds:
+      - npm run typecheck
+    sources:
+      - src/**/*.ts
+      - src/**/*.svelte
+      - tsconfig*.json
+
+  lint:
+    desc: Lint and format-check with Biome (TS, JS, Svelte, JSON, CSS)
+    cmds:
+      - npm run lint
+
+  lint:fix:
+    desc: Run Biome with auto-fix (format + lint safe fixes)
+    cmds:
+      - npm run lint:fix
+
+  clean:
+    desc: Remove all build artifacts (dist/, out/, .vite/)
+    cmds:
+      - npm run clean
+
+  clean:all:
+    desc: Remove build artifacts AND node_modules (full reset)
+    cmds:
+      - npm run clean
+      - '{{if eq OS "windows"}}rmdir /s /q node_modules 2>nul || exit 0{{else}}rm -rf node_modules{{end}}'
+
+  check:
+    desc: Run typecheck + lint together (useful before committing)
+    deps: [typecheck, lint]
+    cmds:
+      - cmd: echo "✓ All checks passed"
+        silent: true

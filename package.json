@@ -1,0 +1,77 @@
+{
+  "name": "stepify",
+  "version": "0.1.0",
+  "description": "Cross-platform desktop dance music player for ballroom and latin dancers",
+  "main": "./out/main/index.js",
+  "author": {
+    "name": "Stepify Contributors"
+  },
+  "homepage": "https://github.com/stepify/stepify",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build && electron-builder",
+    "build:win": "electron-vite build && electron-builder --win",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "preview": "electron-vite preview",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "clean": "rimraf dist out .vite"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "electron-store": "^8.2.0",
+    "fast-glob": "^3.3.2",
+    "flac-tagger": "^2.0.0",
+    "music-metadata": "^7.14.0",
+    "node-id3": "^0.2.9",
+    "soundtouch-ts": "^1.1.1",
+    "web-audio-beat-detector": "^8.2.36"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/rebuild": "^3.6.0",
+    "@sveltejs/vite-plugin-svelte": "^3.1.1",
+    "@tsconfig/svelte": "^5.0.4",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "rimraf": "^5.0.7",
+    "svelte": "^4.2.18",
+    "svelte-check": "^3.8.0",
+    "svelte-preprocess": "^6.0.3",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1"
+  },
+  "build": {
+    "appId": "com.stepify.app",
+    "productName": "Stepify",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "category": "public.app-category.music"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Audio"
+    }
+  }
+}
