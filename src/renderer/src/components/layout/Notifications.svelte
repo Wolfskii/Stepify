@@ -20,7 +20,8 @@ import { notifications, uiActions } from '../../stores/ui.store'
 <style>
   .notifications {
     position: fixed;
-    bottom: var(--space-6);
+    top: calc(var(--titlebar-height) + var(--space-3));
+    bottom: auto;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -42,7 +43,7 @@ import { notifications, uiActions } from '../../stores/ui.store'
     pointer-events: all;
     min-width: 240px;
     max-width: 400px;
-    animation: slide-up var(--duration-normal) var(--ease-out);
+    animation: notif-enter var(--duration-normal) var(--ease-out);
   }
 
   .notif--success { border-color: var(--color-success); }
@@ -69,10 +70,10 @@ import { notifications, uiActions } from '../../stores/ui.store'
     background: var(--color-bg-overlay);
   }
 
-  @keyframes slide-up {
+  @keyframes notif-enter {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(-10px);
     }
     to {
       opacity: 1;

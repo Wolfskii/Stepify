@@ -730,7 +730,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
 
   .track-list__sort-caret {
     flex-shrink: 0;
-    color: var(--color-accent);
+    color: var(--color-text-primary);
   }
 
   .track-list__sort-caret--meta {

@@ -36,27 +36,30 @@ $: currentInLibrary =
 
 /** Mirrors main-process cooldown so we skip pointless IPC; main is authoritative. */
 const TRACK_VOTE_COOLDOWN_MS = 10 * 60 * 1000
-const lastVoteAtByTrackId = new Map<string, number>()
+const lastVoteByTrackId = new Map<string, { at: number; delta: 1 | -1 }>()
 /** Bumps on an interval so vote buttons re-enable after the cooldown without user interaction. */
 let voteCooldownTick = 0
 let voteCooldownInterval: ReturnType<typeof setInterval> | undefined
 
 function isVoteLockedForTrack(trackId: string | undefined): boolean {
   if (!trackId) return false
-  const at = lastVoteAtByTrackId.get(trackId)
-  if (at == null) return false
-  return Date.now() - at < TRACK_VOTE_COOLDOWN_MS
+  const rec = lastVoteByTrackId.get(trackId)
+  if (rec == null) return false
+  return Date.now() - rec.at < TRACK_VOTE_COOLDOWN_MS
 }
 
 $: voteCooldownTick
 $: voteLockedForCurrent = isVoteLockedForTrack($currentTrack?.id)
+$: voteCooldownLastDelta =
+  $currentTrack && voteLockedForCurrent ? lastVoteByTrackId.get($currentTrack.id)?.delta : undefined
 
 async function votePopularity(delta: 1 | -1) {
   const t = get(currentTrack)
-  if (!t || isVoteLockedForTrack(t.id) || !get(libraryState).tracks.some((x) => x.id === t.id)) return
+  if (!t || isVoteLockedForTrack(t.id) || !get(libraryState).tracks.some((x) => x.id === t.id))
+    return
   const ok = await libraryActions.voteTrackPopularity(t.id, delta)
   if (ok) {
-    lastVoteAtByTrackId.set(t.id, Date.now())
+    lastVoteByTrackId.set(t.id, { at: Date.now(), delta })
     voteCooldownTick++
   }
 }
@@ -402,14 +405,15 @@ onDestroy(() => {
         <button
           type="button"
           class="np-btn np-btn--icon np-btn--compact"
+          class:np-btn--vote-cooldown-like={voteCooldownLastDelta === 1}
           disabled={!$currentTrack || !currentInLibrary || voteLockedForCurrent}
-          on:click={() => votePopularity(-1)}
-          title="Dislike (once per 10 minutes per track)"
-          aria-label="Dislike track"
+          on:click={() => votePopularity(1)}
+          title="Like (once per 10 minutes per track)"
+          aria-label="Like track"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
-              d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"
+              d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
             />
           </svg>
         </button>
@@ -493,14 +497,15 @@ onDestroy(() => {
         <button
           type="button"
           class="np-btn np-btn--icon np-btn--compact"
+          class:np-btn--vote-cooldown-dislike={voteCooldownLastDelta === -1}
           disabled={!$currentTrack || !currentInLibrary || voteLockedForCurrent}
-          on:click={() => votePopularity(1)}
-          title="Like (once per 10 minutes per track)"
-          aria-label="Like track"
+          on:click={() => votePopularity(-1)}
+          title="Dislike (once per 10 minutes per track)"
+          aria-label="Dislike track"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
-              d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
+              d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"
             />
           </svg>
         </button>
@@ -837,6 +842,11 @@ onDestroy(() => {
     color: var(--color-accent);
   }
 
+  .np-btn--icon.active:hover:not(:disabled),
+  .np-btn--icon.repeat-one:hover:not(:disabled) {
+    color: var(--color-accent-hover);
+  }
+
   .np-btn--icon.repeat-one {
     color: var(--color-accent);
   }
@@ -850,6 +860,16 @@ onDestroy(() => {
 
   .np-btn--compact:hover:not(:disabled) {
     color: #ffffff;
+  }
+
+  .np-btn--compact.np-btn--vote-cooldown-like:disabled {
+    opacity: 0.9;
+    color: var(--color-accent);
+  }
+
+  .np-btn--compact.np-btn--vote-cooldown-dislike:disabled {
+    opacity: 0.9;
+    color: var(--color-warning);
   }
 
   .np-btn--play {

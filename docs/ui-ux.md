@@ -127,6 +127,7 @@ The tempo slider is the most important UI element. It must feel premium.
 
 ## Accessibility
 
+- **Notifications** — Toasts stack centered **below the frameless title bar** (`--titlebar-height`) so they do not cover the bottom play / transport controls.
 - All interactive elements have `aria-label` or `title`
 - Slider uses `role="slider"` with `aria-valuemin`, `aria-valuemax`, `aria-valuenow`, `aria-valuetext`
 - Focus visible styles on all focusable elements (no `outline: none` without replacement)
