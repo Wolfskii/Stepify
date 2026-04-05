@@ -16,6 +16,7 @@ interface ItunesSearchResponse {
 interface SpotifySearchResponse {
   tracks?: {
     items?: Array<{
+      id?: string
       name?: string
       artists?: Array<{ name?: string }>
       album?: { name?: string; images?: Array<{ url?: string; height?: number }> }
@@ -97,6 +98,22 @@ function normalizeForMatch(s: string): string {
     .trim()
 }
 
+/** Longest run of consecutive query tokens (2..6) that appears inside `artistNorm`. */
+function longestQueryPhraseInArtist(qTokens: string[], artistNorm: string): number {
+  let best = 0
+  const n = qTokens.length
+  const maxLen = Math.min(6, n)
+  for (let len = maxLen; len >= 2; len--) {
+    for (let i = 0; i + len <= n; i++) {
+      const phrase = qTokens.slice(i, i + len).join(' ')
+      if (phrase.length >= 4 && artistNorm.includes(phrase)) {
+        best = Math.max(best, len)
+      }
+    }
+  }
+  return best
+}
+
 /** Higher = closer to the user’s search string (Apple + Spotify hits ranked together). */
 function relevanceScore(query: string, hit: MetadataSearchHit): number {
   const q = normalizeForMatch(query)
@@ -135,16 +152,26 @@ function relevanceScore(query: string, hit: MetadataSearchHit): number {
     score += 500 + 45 * meaningful.length
   }
 
+  // Strong boost when a multi-word slice of the query matches the artist (e.g. "arthur murray" in "Arthur Murray Orchestra").
+  const phraseInArtist = longestQueryPhraseInArtist(qTokens, artist)
+  if (phraseInArtist >= 2) {
+    score += 900 + 650 * phraseInArtist
+  }
+  if (meaningful.length > 0) {
+    const inArtist = meaningful.filter((t) => artist.includes(t)).length
+    score += Math.round((inArtist / meaningful.length) * 1_600)
+  }
+
   for (const t of meaningful) {
     if (title.includes(t)) score += 140
-    if (artist.includes(t)) score += 110
+    if (artist.includes(t)) score += 220
     if (album.includes(t)) score += 45
   }
 
   const first = meaningful[0] ?? qTokens[0] ?? ''
   if (first.length >= 2) {
     if (title.startsWith(first)) score += 350
-    if (artist.startsWith(first)) score += 220
+    if (artist.startsWith(first)) score += 380
   }
 
   return score
@@ -153,30 +180,15 @@ function relevanceScore(query: string, hit: MetadataSearchHit): number {
 const APPLE_SOURCE_LABEL = 'Apple Music catalog'
 const SPOTIFY_SOURCE_LABEL = 'Spotify catalog'
 
-type ScoredHit = {
-  h: MetadataSearchHit
-  score: number
-  tie: string
-}
-
-function scoreHitsForBalance(query: string, hits: MetadataSearchHit[]): ScoredHit[] {
-  const arr = hits.map((h, index) => ({
-    h,
-    score: relevanceScore(query, h),
-    tie: `${normKeyPart(h.artist)}\t${normKeyPart(h.title)}\t${String(index).padStart(3, '0')}`,
-  }))
-  arr.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score
-    return a.tie.localeCompare(b.tie)
-  })
-  return arr
-}
+type RankedHit = { h: MetadataSearchHit; rank: number }
 
 /**
- * Aim for ~half Apple / half Spotify (by count), then backfill from whichever catalog has
- * higher next relevance until `maxTotal` or both are exhausted. Final order is by relevance again.
+ * ~Half Apple / half Spotify without ranking each catalog separately (that dropped strong Spotify
+ * rows that scored below other Spotify junk but above many Apple rows). We merge in **global**
+ * relevance order while each side stays at most `ceil(maxTotal/2)` until one catalog runs out,
+ * then the rest fills from the other (same idea as “take more from the other if not enough”).
  */
-function balanceHitsBySourceAndRelevance(
+function mergeCatalogHitsBalanced(
   query: string,
   appleHits: MetadataSearchHit[],
   spotifyHits: MetadataSearchHit[],
@@ -184,38 +196,67 @@ function balanceHitsBySourceAndRelevance(
 ): MetadataSearchHit[] {
   if (maxTotal <= 0) return []
 
-  const aList = scoreHitsForBalance(query, appleHits)
-  const sList = scoreHitsForBalance(query, spotifyHits)
+  const combined = [...appleHits, ...spotifyHits]
+  if (combined.length <= maxTotal) return sortHitsByRelevance(query, combined)
 
-  const half = Math.floor(maxTotal / 2)
-  let takeA = Math.min(half, aList.length)
-  let takeS = Math.min(half, sList.length)
-  let rem = maxTotal - takeA - takeS
+  const sorted = sortHitsByRelevance(query, combined)
+  const ranked: RankedHit[] = sorted.map((h, rank) => ({ h, rank }))
+  const appleQ = ranked.filter((x) => x.h.sourceLabel === APPLE_SOURCE_LABEL)
+  const spotifyQ = ranked.filter((x) => x.h.sourceLabel === SPOTIFY_SOURCE_LABEL)
 
-  while (rem > 0) {
-    const canA = takeA < aList.length
-    const canS = takeS < sList.length
-    if (!canA && !canS) break
-    if (!canA) {
-      takeS++
-      rem--
+  const maxPerSide = Math.ceil(maxTotal / 2)
+  let ia = 0
+  let ib = 0
+  let nApple = 0
+  let nSpotify = 0
+  const out: MetadataSearchHit[] = []
+
+  while (out.length < maxTotal && (ia < appleQ.length || ib < spotifyQ.length)) {
+    const onlyAppleLeft = ib >= spotifyQ.length
+    const onlySpotifyLeft = ia >= appleQ.length
+
+    if (onlySpotifyLeft) {
+      out.push(appleQ[ia].h)
+      ia++
+      nApple++
       continue
     }
-    if (!canS) {
-      takeA++
-      rem--
+    if (onlyAppleLeft) {
+      out.push(spotifyQ[ib].h)
+      ib++
+      nSpotify++
       continue
     }
-    if (aList[takeA].score >= sList[takeS].score) takeA++
-    else takeS++
-    rem--
+
+    const capApple = nApple >= maxPerSide
+    const capSpotify = nSpotify >= maxPerSide
+
+    if (capApple && !capSpotify) {
+      out.push(spotifyQ[ib].h)
+      ib++
+      nSpotify++
+      continue
+    }
+    if (capSpotify && !capApple) {
+      out.push(appleQ[ia].h)
+      ia++
+      nApple++
+      continue
+    }
+    if (capApple && capSpotify) break
+
+    if (appleQ[ia].rank < spotifyQ[ib].rank) {
+      out.push(appleQ[ia].h)
+      ia++
+      nApple++
+    } else {
+      out.push(spotifyQ[ib].h)
+      ib++
+      nSpotify++
+    }
   }
 
-  const picked = [
-    ...aList.slice(0, takeA).map((x) => x.h),
-    ...sList.slice(0, takeS).map((x) => x.h),
-  ]
-  return sortHitsByRelevance(query, picked)
+  return sortHitsByRelevance(query, out)
 }
 
 /**
@@ -277,13 +318,19 @@ const SPOTIFY_SEARCH_PAGE_COUNT = 5
 const METADATA_MAX_RESULTS = SPOTIFY_SEARCH_PAGE_LIMIT * SPOTIFY_SEARCH_PAGE_COUNT
 
 /**
- * Client-credentials search has no user market; Spotify needs an ISO 3166-1 alpha-2 market
- * so results are considered available. Override with env e.g. GB, DE.
+ * Optional ISO market on Spotify API calls. When unset, the `market` param is **omitted** so
+ * catalog search matches the broad index (many metadata-only / out-of-market tracks still appear).
+ * Set `SPOTIFY_MARKET=US` (etc.) if you want results limited to “available in that market”.
  */
-function spotifySearchMarket(): string {
+function spotifyApiMarketParam(): string | null {
   const m = process.env.SPOTIFY_MARKET?.trim()
   if (m && /^[A-Za-z]{2}$/.test(m)) return m.toUpperCase()
-  return 'US'
+  return null
+}
+
+function appendMarketParam(params: URLSearchParams): void {
+  const m = spotifyApiMarketParam()
+  if (m) params.set('market', m)
 }
 
 function stripAsciiControlChars(s: string): string {
@@ -337,8 +384,10 @@ async function fetchSpotifyTrackById(
   trackId: string,
   accessToken: string,
 ): Promise<MetadataSearchHit | null> {
-  const params = new URLSearchParams({ market: spotifySearchMarket() })
-  const url = `https://api.spotify.com/v1/tracks/${encodeURIComponent(trackId)}?${params.toString()}`
+  const params = new URLSearchParams()
+  appendMarketParam(params)
+  const qs = params.toString()
+  const url = `https://api.spotify.com/v1/tracks/${encodeURIComponent(trackId)}${qs ? `?${qs}` : ''}`
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -391,8 +440,8 @@ async function fetchSpotifySearchPage(
     type: 'track',
     limit: String(SPOTIFY_SEARCH_PAGE_LIMIT),
     offset: String(offset),
-    market: spotifySearchMarket(),
   })
+  appendMarketParam(params)
   const url = `https://api.spotify.com/v1/search?${params.toString()}`
   const res = await fetch(url, {
     headers: {
@@ -493,7 +542,7 @@ export async function searchTrackMetadataOnline(query: string): Promise<Metadata
   }
 
   const cap = spotifyDirect ? METADATA_MAX_RESULTS - 1 : METADATA_MAX_RESULTS
-  const merged = balanceHitsBySourceAndRelevance(term, itunes, spotify, cap)
+  const merged = mergeCatalogHitsBalanced(term, itunes, spotify, cap)
   if (!spotifyDirect) return merged
   const k = spotifyHitDedupeKey(spotifyDirect)
   const rest = merged.filter(
