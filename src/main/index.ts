@@ -34,6 +34,20 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  if (is.dev) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      if (input.code !== 'KeyP' || !input.shift || !(input.control || input.meta)) return
+      event.preventDefault()
+      const wc = mainWindow.webContents
+      if (wc.isDevToolsOpened()) {
+        wc.closeDevTools()
+      } else {
+        wc.openDevTools({ mode: 'undocked' })
+      }
+    })
+  }
+
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {

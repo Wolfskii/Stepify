@@ -29,9 +29,7 @@ export function buildMetadataSearchQuery(track: Track): string {
 export function buildDefaultCatalogSearchQuery(track: Track): string {
   const stem = track.localPath ? fileStem(track.localPath) : ''
   const artist =
-    track.artist?.trim() && track.artist.trim() !== UNKNOWN_ARTIST
-      ? track.artist.trim()
-      : ''
+    track.artist?.trim() && track.artist.trim() !== UNKNOWN_ARTIST ? track.artist.trim() : ''
   if (artist && stem) return `${artist} ${stem}`.trim()
   if (stem) return stem
   if (artist) return artist
@@ -40,7 +38,5 @@ export function buildDefaultCatalogSearchQuery(track: Track): string {
 
 export function trackNeedsMetadataEnrichment(t: Track): boolean {
   if (t.source !== 'local') return false
-  return Boolean(
-    t.missingEmbeddedTitle || t.missingEmbeddedArtist || t.missingEmbeddedArt,
-  )
+  return Boolean(t.missingEmbeddedTitle || t.missingEmbeddedArtist || t.missingEmbeddedArt)
 }

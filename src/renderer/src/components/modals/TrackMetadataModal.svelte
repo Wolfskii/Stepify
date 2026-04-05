@@ -21,9 +21,7 @@ $: queue = $trackMetadataQueueIds
 $: total = $trackMetadataWizardTotal
 $: currentTrackId = queue[0]
 $: track =
-  currentTrackId != null
-    ? $libraryState.tracks.find((t) => t.id === currentTrackId)
-    : undefined
+  currentTrackId != null ? $libraryState.tracks.find((t) => t.id === currentTrackId) : undefined
 
 $: indexInWizard = total > 0 && currentTrackId ? total - queue.length + 1 : 0
 
@@ -48,25 +46,19 @@ let searchSeededFor: string | null = null
 let coverFileInput: HTMLInputElement
 
 $: catalogDefaultQuery = track ? buildDefaultCatalogSearchQuery(track) : ''
-$: catalogResetEnabled =
-  track != null && manualSearchQuery.trim() !== catalogDefaultQuery.trim()
+$: catalogResetEnabled = track != null && manualSearchQuery.trim() !== catalogDefaultQuery.trim()
 
 $: if ($activeModal !== 'track-metadata') {
   searchSeededFor = null
 }
 
 $: searchResultsPageCount =
-  hits.length === 0
-    ? 0
-    : Math.min(RESULTS_MAX_PAGES, Math.ceil(hits.length / RESULTS_PAGE_SIZE))
+  hits.length === 0 ? 0 : Math.min(RESULTS_MAX_PAGES, Math.ceil(hits.length / RESULTS_PAGE_SIZE))
 
 $: pageHits =
   searchResultsPageCount === 0
     ? []
-    : hits.slice(
-        searchPage * RESULTS_PAGE_SIZE,
-        searchPage * RESULTS_PAGE_SIZE + RESULTS_PAGE_SIZE,
-      )
+    : hits.slice(searchPage * RESULTS_PAGE_SIZE, searchPage * RESULTS_PAGE_SIZE + RESULTS_PAGE_SIZE)
 
 function revokeCoverPreview(): void {
   if (manualCoverPreviewUrl) {

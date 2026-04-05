@@ -35,8 +35,7 @@ interface SpotifyTokenResponse {
  * Prefer env vars at build/pack time for shipping; settings store is optional for local dev.
  */
 function resolveSpotifyAppCredentials(): { clientId: string; clientSecret: string } | null {
-  const id =
-    process.env.SPOTIFY_CLIENT_ID?.trim() || settingsService.get().spotifyClientId?.trim()
+  const id = process.env.SPOTIFY_CLIENT_ID?.trim() || settingsService.get().spotifyClientId?.trim()
   const secret =
     process.env.SPOTIFY_CLIENT_SECRET?.trim() || settingsService.get().spotifyClientSecret?.trim()
   if (!id || !secret) return null
@@ -298,9 +297,7 @@ async function searchItunesCatalog(term: string): Promise<MetadataSearchHit[]> {
   const json = (await res.json()) as ItunesSearchResponse
   const rows = json.results ?? []
   return rows.slice(0, ITUNES_SEARCH_LIMIT).map((r) => {
-    const hiArt = r.artworkUrl100
-      ? r.artworkUrl100.replace(/100x100bb/g, '600x600bb')
-      : ''
+    const hiArt = r.artworkUrl100 ? r.artworkUrl100.replace(/100x100bb/g, '600x600bb') : ''
     return {
       title: r.trackName ?? 'Unknown title',
       artist: r.artistName ?? 'Unknown artist',
@@ -346,10 +343,7 @@ function stripAsciiControlChars(s: string): string {
 /** Avoid control chars / odd whitespace that can upset the search `q` parameter. */
 function sanitizeSpotifyQuery(term: string): string {
   const withoutUrl = stripSpotifyTrackUrlsForSearch(term)
-  return stripAsciiControlChars(withoutUrl)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 200)
+  return stripAsciiControlChars(withoutUrl).replace(/\s+/g, ' ').trim().slice(0, 200)
 }
 
 /**
@@ -357,7 +351,10 @@ function sanitizeSpotifyQuery(term: string): string {
  */
 function stripSpotifyTrackUrlsForSearch(term: string): string {
   return term
-    .replace(/https?:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\/[a-zA-Z0-9]+(?:\?[^\s]*)?/gi, ' ')
+    .replace(
+      /https?:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\/[a-zA-Z0-9]+(?:\?[^\s]*)?/gi,
+      ' ',
+    )
     .replace(/spotify:track:[a-zA-Z0-9]+/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -367,9 +364,7 @@ function stripSpotifyTrackUrlsForSearch(term: string): string {
 export function parseSpotifyTrackIdFromQuery(text: string): string | null {
   const uri = text.match(/spotify:track:([a-zA-Z0-9]+)/i)
   if (uri?.[1]) return uri[1]
-  const web = text.match(
-    /open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\/([a-zA-Z0-9]+)/i,
-  )
+  const web = text.match(/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\/([a-zA-Z0-9]+)/i)
   if (web?.[1]) return web[1]
   return null
 }
@@ -409,9 +404,7 @@ async function fetchSpotifyTrackById(
   return mapSpotifyTrackToHit(json as SpotifyTrackItem)
 }
 
-type SpotifyTrackItem = NonNullable<
-  NonNullable<SpotifySearchResponse['tracks']>['items']
->[number]
+type SpotifyTrackItem = NonNullable<NonNullable<SpotifySearchResponse['tracks']>['items']>[number]
 
 function mapSpotifyTrackToHit(item: SpotifyTrackItem): MetadataSearchHit {
   const artists =

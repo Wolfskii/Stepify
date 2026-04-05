@@ -96,7 +96,8 @@ export interface LibraryDirectory {
 }
 
 /** Column sort for the library track list (All Tracks, folder, or dance filter). */
-export type TrackListSortKey = 'popularity' | 'bpm' | 'duration' | 'title' | 'dance'
+/** `none` = custom row order (manual reorder or shuffle); no column-sort carets. */
+export type TrackListSortKey = 'popularity' | 'bpm' | 'duration' | 'title' | 'dance' | 'none'
 
 export interface TrackListSort {
   key: TrackListSortKey
@@ -143,7 +144,9 @@ export interface PlaybackState {
   queueIndex: number
   /** Source file duration in seconds (from metadata / decoded buffer) */
   sourceDuration: number
-  /** When true, follow `queue` order; order is built once when shuffle is turned on (weighted by popularity). */
+  /**
+   * When true, follow `queue` order; order is built when shuffle is turned on (random with mild popularity bias).
+   */
   shuffle: boolean
   /** Loop: off, whole queue, or current track (track applies at end of song) */
   repeatMode: RepeatMode

@@ -4,8 +4,7 @@ import { libraryActions, selectedDanceId } from '../../stores/library.store'
 import { danceOrderActions, reorderMimeForStyle } from '../../stores/danceOrder.store'
 import { playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
-
-const TRACK_DRAG_MIME = 'application/x-stepify-tracks'
+import { TRACK_ASSIGN_DRAG_MIME } from '../../utils/libraryDrag'
 
 export let dance: DanceCategory
 
@@ -39,7 +38,7 @@ function onRowKeydown(e: KeyboardEvent) {
 }
 
 function isTrackDrag(e: DragEvent) {
-  return e.dataTransfer?.types.includes(TRACK_DRAG_MIME) ?? false
+  return e.dataTransfer?.types.includes(TRACK_ASSIGN_DRAG_MIME) ?? false
 }
 
 function isReorderDrag(e: DragEvent) {
@@ -92,7 +91,7 @@ async function onRowDrop(e: DragEvent) {
     e.preventDefault()
     dropHover = false
     reorderHover = false
-    const raw = dt.getData(TRACK_DRAG_MIME)
+    const raw = dt.getData(TRACK_ASSIGN_DRAG_MIME)
     if (!raw) return
     let ids: unknown
     try {

@@ -6,9 +6,7 @@ import { playerActions } from '../../stores/player.store'
 import { persistManualBpm, resolveBpmForLocalTrack } from '../../services/bpmAnalysis'
 
 $: track =
-  $editBpmTrackId != null
-    ? $libraryState.tracks.find((t) => t.id === $editBpmTrackId)
-    : undefined
+  $editBpmTrackId != null ? $libraryState.tracks.find((t) => t.id === $editBpmTrackId) : undefined
 
 let inputStr = ''
 let busy = false

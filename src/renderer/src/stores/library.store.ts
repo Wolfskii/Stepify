@@ -4,6 +4,7 @@ import type {
   DanceId,
   LibraryDirectory,
   LibraryDiskSyncPayload,
+  PlaybackState,
   Track,
   TrackListSort,
   TrackListSortKey,
@@ -15,10 +16,12 @@ import {
   DEFAULT_TRACK_LIST_SORT,
   filterTracksForListView,
   pathsEqualLibrary,
+  reorderVisibleIds,
   sortTracksForListView,
   trackFileUnderLibraryFolder,
   weightedShuffleByPopularity,
 } from '../utils/trackListFilter'
+import { logTrackReorder } from '../utils/trackReorderDebug'
 import { uiActions } from './ui.store'
 
 interface LibraryState {
@@ -51,6 +54,16 @@ interface LibraryState {
   deferredListPopularityByTrackId: Record<string, number>
   /** User-chosen column sort (shuffle list order overrides until a sort header is used). */
   trackListSort: TrackListSort
+  /**
+   * When set (and context matches the sidebar), list order follows this sequence instead of column sort.
+   * Cleared when changing sort, filter, or turning shuffle on.
+   */
+  manualListOrderIds: string[] | null
+  manualListDisplayContext: {
+    danceId: DanceId | null
+    folderPath: string | null
+    searchQuery: string
+  } | null
 }
 
 const initialState: LibraryState = {
@@ -67,6 +80,8 @@ const initialState: LibraryState = {
   shuffleDisplayContext: null,
   deferredListPopularityByTrackId: {},
   trackListSort: { ...DEFAULT_TRACK_LIST_SORT },
+  manualListOrderIds: null,
+  manualListDisplayContext: null,
 }
 
 export const libraryState = writable<LibraryState>(initialState)
@@ -83,29 +98,63 @@ function shuffleDisplayApplies(s: LibraryState): boolean {
   return s.searchQuery === ctx.searchQuery
 }
 
-export const filteredTracks = derived(libraryState, ($s) => {
-  let tracks = filterTracksForListView($s.tracks, {
-    folderPath: $s.selectedFolderPath,
-    danceId: $s.selectedDanceId,
-    searchQuery: $s.searchQuery,
+function manualDisplayApplies(s: LibraryState): boolean {
+  const ctx = s.manualListDisplayContext
+  if (!ctx || !s.manualListOrderIds?.length) return false
+  if (!pathsEqualLibrary(s.selectedFolderPath, ctx.folderPath)) return false
+  if (s.selectedDanceId !== ctx.danceId) return false
+  return s.searchQuery === ctx.searchQuery
+}
+
+/** Single source for filtered list row order (shuffle, manual, or column sort). */
+function computeVisibleTracks(s: LibraryState): Track[] {
+  const tracks = filterTracksForListView(s.tracks, {
+    folderPath: s.selectedFolderPath,
+    danceId: s.selectedDanceId,
+    searchQuery: s.searchQuery,
   })
 
-  if (shuffleDisplayApplies($s)) {
-    const order = $s.shuffleQueueOrderIds!
+  if (shuffleDisplayApplies(s)) {
+    const order = s.shuffleQueueOrderIds
+    if (!order?.length) {
+      return sortTracksForListView(tracks, s.trackListSort, s.deferredListPopularityByTrackId)
+    }
     const map = new Map(order.map((id, i) => [id, i]))
-    tracks = [...tracks].sort((a, b) => {
+    return [...tracks].sort((a, b) => {
       const ia = map.get(a.id)
       const ib = map.get(b.id)
       const na = ia === undefined ? 1_000_000 : ia
       const nb = ib === undefined ? 1_000_000 : ib
       return na - nb
     })
-  } else {
-    tracks = sortTracksForListView(tracks, $s.trackListSort, $s.deferredListPopularityByTrackId)
   }
 
-  return tracks
-})
+  if (manualDisplayApplies(s) && s.manualListOrderIds) {
+    const map = new Map(s.manualListOrderIds.map((id, i) => [id, i]))
+    const inManual = tracks.filter((t) => map.has(t.id))
+    inManual.sort((a, b) => (map.get(a.id) ?? 0) - (map.get(b.id) ?? 0))
+    const rest = tracks.filter((t) => !map.has(t.id))
+    const sortedRest = sortTracksForListView(
+      rest,
+      s.trackListSort,
+      s.deferredListPopularityByTrackId,
+    )
+    return [...inManual, ...sortedRest]
+  }
+
+  // sort.key === 'none' means "custom row order" — only meaningful when manual/shuffle applies.
+  // In other views fall back to the default sort so the list isn't unsorted.
+  const effectiveSort = s.trackListSort.key === 'none' ? DEFAULT_TRACK_LIST_SORT : s.trackListSort
+  return sortTracksForListView(tracks, effectiveSort, s.deferredListPopularityByTrackId)
+}
+
+export const filteredTracks = derived(libraryState, ($s) => computeVisibleTracks($s))
+
+/** True while shuffle order drives the list (column-sort carets hidden). */
+export const shuffleListDisplayActive = derived(libraryState, ($s) => shuffleDisplayApplies($s))
+
+/** True while manual drag-order applies to the current filter (carets off — not column-sorted). */
+export const manualListOrderDisplayActive = derived(libraryState, ($s) => manualDisplayApplies($s))
 
 export const trackListSort = derived(libraryState, ($s) => $s.trackListSort)
 
@@ -135,6 +184,46 @@ async function clearShuffleListOrdering(): Promise<void> {
   }))
   const { playerActions } = await import('./player.store')
   playerActions.setShuffle(false)
+}
+
+function clearManualListOrdering() {
+  libraryState.update((s) =>
+    s.manualListOrderIds == null && s.manualListDisplayContext == null
+      ? s
+      : { ...s, manualListOrderIds: null, manualListDisplayContext: null },
+  )
+}
+
+function playbackListContextMatchesSidebar(l: LibraryState, p: PlaybackState): boolean {
+  const dance = l.selectedDanceId
+  const folder = l.selectedFolderPath
+  const pd = p.playbackListDanceId
+  const pf = p.playbackListFolderPath
+  if (dance != null && folder == null) {
+    return pd === dance && pf == null
+  }
+  if (folder != null && dance == null) {
+    return pd == null && pf != null && pathsEqualLibrary(folder, pf)
+  }
+  if (dance == null && folder == null) {
+    return pd == null && pf == null
+  }
+  return false
+}
+
+function visibleFilterSetMatchesQueue(l: LibraryState, p: PlaybackState): boolean {
+  if (p.queue.length === 0) return false
+  const visible = filterTracksForListView(l.tracks, {
+    folderPath: l.selectedFolderPath,
+    danceId: l.selectedDanceId,
+    searchQuery: l.searchQuery,
+  })
+  if (visible.length !== p.queue.length) return false
+  const vs = new Set(visible.map((t) => t.id))
+  for (const t of p.queue) {
+    if (!vs.has(t.id)) return false
+  }
+  return true
 }
 
 function folderBasenamesForMessage(paths: string[], maxShow = 3): string {
@@ -209,6 +298,7 @@ async function handleAddLibraryPathsResponse(data: AddLibraryPathsResult): Promi
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 function defaultDirectionForSortKey(key: TrackListSortKey): 'asc' | 'desc' {
+  if (key === 'none') return 'asc'
   return key === 'popularity' ? 'desc' : 'asc'
 }
 
@@ -221,8 +311,10 @@ export const libraryActions = {
   },
 
   async toggleTrackListSort(key: TrackListSortKey): Promise<void> {
+    if (key === 'none') return
     if (key === 'dance' && get(libraryState).selectedDanceId != null) return
     await clearShuffleListOrdering()
+    clearManualListOrdering()
     libraryState.update((s) => {
       const cur = s.trackListSort
       const next =
@@ -247,6 +339,7 @@ export const libraryActions = {
   setTracks(tracks: Track[]) {
     libraryActions.clearDeferredListPopularity()
     libraryActions.resetTrackListSort()
+    clearManualListOrdering()
     libraryState.update((s) => ({ ...s, tracks }))
   },
 
@@ -387,9 +480,7 @@ export const libraryActions = {
     })
 
     if (!sameDanceReselect) {
-      libraryActions.resetTrackListSort()
       libraryActions.clearDeferredListPopularity()
-      void clearShuffleListOrdering()
     }
   },
 
@@ -417,9 +508,7 @@ export const libraryActions = {
         selectionAnchorIndex: null,
       }
     })
-    libraryActions.resetTrackListSort()
     libraryActions.clearDeferredListPopularity()
-    void clearShuffleListOrdering()
   },
 
   clearTrackSelection() {
@@ -600,15 +689,10 @@ export const libraryActions = {
 
   setSearchQuery(query: string) {
     const prev = get(libraryState)
-    const hadShuffleOrder = prev.shuffleQueueOrderIds != null || prev.shuffleDisplayContext != null
     if (prev.searchQuery !== query) {
-      libraryActions.resetTrackListSort()
       libraryActions.clearDeferredListPopularity()
     }
     libraryState.update((s) => ({ ...s, searchQuery: query }))
-    if (hadShuffleOrder) {
-      void clearShuffleListOrdering()
-    }
   },
 
   updateTrackDance(trackId: string, danceId: DanceId, assigned: boolean) {
@@ -629,6 +713,91 @@ export const libraryActions = {
       ...s,
       tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t)),
     }))
+  },
+
+  /**
+   * Reorder rows in the current sidebar view (manual order when shuffle is off, else shuffle order).
+   * If playback was started from this same list, updates the player queue to match.
+   */
+  reorderVisibleTracks(fromIndex: number, toIndex: number) {
+    logTrackReorder('reorderVisibleTracks called', { fromIndex, toIndex })
+    if (fromIndex === toIndex) {
+      logTrackReorder('reorder abort: fromIndex === toIndex')
+      return
+    }
+    const l = get(libraryState)
+    logTrackReorder('pre-reorder library snapshot', {
+      trackListSort: l.trackListSort,
+      manualDisplayApplies: manualDisplayApplies(l),
+      shuffleDisplayApplies: shuffleDisplayApplies(l),
+      selectedDanceId: l.selectedDanceId,
+      selectedFolderPath: l.selectedFolderPath,
+      searchQuery: l.searchQuery,
+      manualListOrderIdsLen: l.manualListOrderIds?.length ?? 0,
+      shuffleQueueOrderIdsLen: l.shuffleQueueOrderIds?.length ?? 0,
+    })
+    const ordered = computeVisibleTracks(l)
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= ordered.length || toIndex >= ordered.length) {
+      logTrackReorder('reorder abort: index out of range', {
+        orderedLength: ordered.length,
+        fromIndex,
+        toIndex,
+      })
+      return
+    }
+    const ids = ordered.map((t) => t.id)
+    const nextIds = reorderVisibleIds(ids, fromIndex, toIndex)
+    const ctx = {
+      danceId: l.selectedDanceId,
+      folderPath: l.selectedFolderPath,
+      searchQuery: l.searchQuery,
+    }
+    const sortNone: TrackListSort = { key: 'none', direction: 'asc' }
+    if (shuffleDisplayApplies(l)) {
+      logTrackReorder('reorder path: shuffle list branch')
+      libraryState.update((s) => {
+        if (!shuffleDisplayApplies(s)) {
+          logTrackReorder('shuffle branch NO-OP inside update', {
+            hasShuffleCtx: s.shuffleDisplayContext != null,
+            shuffleQueueOrderIdsLen: s.shuffleQueueOrderIds?.length ?? 0,
+            selectedDanceId: s.selectedDanceId,
+            ctxDanceId: s.shuffleDisplayContext?.danceId ?? null,
+          })
+          return s
+        }
+        return { ...s, shuffleQueueOrderIds: nextIds, trackListSort: sortNone }
+      })
+    } else {
+      logTrackReorder('reorder path: manual list branch', {
+        nextIdsLen: nextIds.length,
+        movedId: ids[fromIndex],
+        beforeTitles: ordered.map((t) => t.title).slice(0, 12),
+      })
+      // Apply sort reset + manual order in one update so nothing re-sorts between ticks.
+      libraryState.update((s) => ({
+        ...s,
+        manualListOrderIds: nextIds,
+        manualListDisplayContext: ctx,
+        trackListSort: sortNone,
+      }))
+    }
+    const after = get(libraryState)
+    logTrackReorder('post-reorder library snapshot', {
+      trackListSort: after.trackListSort,
+      manualDisplayApplies: manualDisplayApplies(after),
+      shuffleDisplayApplies: shuffleDisplayApplies(after),
+      manualListOrderIdsLen: after.manualListOrderIds?.length ?? 0,
+      visibleFirstTitles: computeVisibleTracks(after)
+        .slice(0, 12)
+        .map((t) => t.title),
+    })
+    void import('./player.store').then(({ playerActions, playerState }) => {
+      const p = get(playerState)
+      const lib = get(libraryState)
+      if (!playbackListContextMatchesSidebar(lib, p)) return
+      if (!visibleFilterSetMatchesQueue(lib, p)) return
+      playerActions.reorderQueueByOrderedIds(nextIds)
+    })
   },
 
   /** Rebuild queue + list order from shuffle / popularity (Now Playing bar). */
@@ -665,6 +834,8 @@ export const libraryActions = {
         ...s,
         shuffleQueueOrderIds: null,
         shuffleDisplayContext: null,
+        manualListOrderIds: null,
+        manualListDisplayContext: null,
       }))
       playerActions.setShuffle(false)
       playerActions.setQueue(sorted, start, listDanceId, listFolderPath)
@@ -692,6 +863,8 @@ export const libraryActions = {
 
     libraryState.update((s) => ({
       ...s,
+      manualListOrderIds: null,
+      manualListDisplayContext: null,
       shuffleQueueOrderIds: queue.map((t) => t.id),
       shuffleDisplayContext,
     }))

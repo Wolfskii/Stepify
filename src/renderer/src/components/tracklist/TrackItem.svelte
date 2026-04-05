@@ -1,16 +1,35 @@
 <script lang="ts">
+import { createEventDispatcher } from 'svelte'
 import type { Track, DanceId } from '@shared/types'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import { currentTrack, isPlaying, playerActions, playerState } from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
 import { uiActions } from '../../stores/ui.store'
 import { libraryActions, libraryState, selectedTrackIds } from '../../stores/library.store'
+import { TRACK_ASSIGN_DRAG_MIME, TRACK_REORDER_DRAG_MIME } from '../../utils/libraryDrag'
+import {
+  clearTrackListReorderDragOrigin,
+  isTrackListReorderDragPending,
+  setTrackListReorderDragOrigin,
+} from '../../utils/trackListReorderDragSession'
+import { logTrackReorder } from '../../utils/trackReorderDebug'
 
-const TRACK_DRAG_MIME = 'application/x-stepify-tracks'
+const dispatch = createEventDispatcher<{
+  reorderdragstart: { index: number }
+  reorderdragend: Record<string, never>
+}>()
 
 export let track: Track
 export let index: number
 export let queue: Track[]
+/** Highlight row as reorder drop target while a list reorder drag is active. */
+export let reorderDropHighlight = false
+/** Row is the one being dragged (dim source while preview follows cursor). */
+export let reorderSourceRow = false
+/** Vertical translate (px) for gap preview while another row is dragged. */
+export let reorderPreviewOffset = 0
+/** Apply transform transition during list reorder. */
+export let reorderAnimating = false
 /** When set (dance filter view), meta shows BPM/time + a dance label control that opens Set dance (incl. None). */
 export let filterDanceId: DanceId | null = null
 /** When set (folder filter view), scope “now playing” row to that list */
@@ -87,8 +106,7 @@ $: filterDanceMeta = filterDanceId ? DANCE_CATEGORIES_BY_ID[filterDanceId] : nul
 $: primaryDance = primaryDanceId ? DANCE_CATEGORIES_BY_ID[primaryDanceId] : null
 /** Shown on the last-column badge: filtered dance name, assigned dance, or None. */
 $: danceBadgeMeta = filterDanceId ? filterDanceMeta : primaryDance
-$: popScore =
-  ($libraryState.deferredListPopularityByTrackId[track.id] ?? track.popularityScore) ?? 0
+$: popScore = $libraryState.deferredListPopularityByTrackId[track.id] ?? track.popularityScore ?? 0
 
 function onRowClick(e: MouseEvent) {
   const el = e.target as HTMLElement | null
@@ -96,21 +114,113 @@ function onRowClick(e: MouseEvent) {
   libraryActions.handleTrackRowClick(track.id, index, queue, e)
 }
 
-function onDragStart(e: DragEvent) {
+function dragTargetIsExcluded(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el?.closest) return true
+  if (el.closest('button')) return true
+  if (el.closest('.track-item__art--btn')) return true
+  if (el.closest('.track-item__dance-icon-btn') || el.closest('.track-item__dance-change-btn'))
+    return true
+  if (el.closest('.track-item__bpm--btn')) return true
+  return false
+}
+
+function dragTargetIsAssignZone(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return Boolean(el?.closest?.('.track-item__info'))
+}
+
+let dragPreviewEl: HTMLElement | null = null
+
+function onAssignDragStart(e: DragEvent) {
+  clearTrackListReorderDragOrigin()
   const dt = e.dataTransfer
   if (!dt) return
   const sel = $selectedTrackIds
   const ids = sel.length > 0 && sel.includes(track.id) ? sel : [track.id]
-  dt.setData(TRACK_DRAG_MIME, JSON.stringify(ids))
+  dt.setData(TRACK_ASSIGN_DRAG_MIME, JSON.stringify(ids))
+  dt.setData('text/plain', `assign:${track.id}`)
   dt.effectAllowed = 'copy'
+}
+
+function onReorderDragStart(e: DragEvent) {
+  const dt = e.dataTransfer
+  if (!dt) return
+  setTrackListReorderDragOrigin(index)
+  const payload = JSON.stringify({ fromIndex: index })
+  dt.setData(TRACK_REORDER_DRAG_MIME, payload)
+  dt.setData('text/plain', payload)
+  dt.effectAllowed = 'move'
+  logTrackReorder('row dragstart (reorder)', {
+    index,
+    trackId: track.id,
+    typesAfterSetData: [...dt.types],
+  })
+  dispatch('reorderdragstart', { index })
+
+  const row = e.currentTarget as HTMLElement
+  if (typeof dt.setDragImage === 'function') {
+    const clone = row.cloneNode(true) as HTMLElement
+    clone.classList.add('track-item--drag-clone-preview')
+    const w = row.offsetWidth
+    clone.style.width = `${w}px`
+    clone.style.boxSizing = 'border-box'
+    document.body.appendChild(clone)
+    clone.style.position = 'fixed'
+    clone.style.left = '-9999px'
+    clone.style.top = '0'
+    clone.style.pointerEvents = 'none'
+    clone.style.zIndex = '10000'
+    const rect = row.getBoundingClientRect()
+    const dx = e.clientX - rect.left
+    const dy = e.clientY - rect.top
+    dt.setDragImage(clone, dx, dy)
+    dragPreviewEl = clone
+  }
+}
+
+function onUnifiedDragStart(e: DragEvent) {
+  if (dragTargetIsExcluded(e.target)) {
+    e.preventDefault()
+    return
+  }
+  if (dragTargetIsAssignZone(e.target)) {
+    onAssignDragStart(e)
+    return
+  }
+  onReorderDragStart(e)
+}
+
+function onUnifiedDragEnd() {
+  logTrackReorder('row dragend', {
+    index,
+    trackId: track.id,
+    pending: isTrackListReorderDragPending(),
+  })
+  if (dragPreviewEl?.parentNode) {
+    dragPreviewEl.remove()
+  }
+  dragPreviewEl = null
+  // Electron may fire dragend before drop; clearing here would wipe the session before onRowReorderDrop runs.
+  queueMicrotask(() => {
+    logTrackReorder('row dragend microtask (before session clear)', {
+      pending: isTrackListReorderDragPending(),
+    })
+    clearTrackListReorderDragOrigin()
+  })
+  dispatch('reorderdragend')
 }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <div
   class="track-item"
+  data-reorder-index={index}
   class:row-selected={isRowSelected}
   class:track-item--current={showAsPlayingRow}
+  class:track-item--reorder-target={reorderDropHighlight}
+  class:track-item--reorder-source={reorderSourceRow}
+  class:track-item--reorder-animate={reorderAnimating}
   role="row"
   aria-selected={isRowSelected}
   aria-current={showAsPlayingRow ? 'true' : undefined}
@@ -119,9 +229,12 @@ function onDragStart(e: DragEvent) {
   on:dblclick={play}
   tabindex="0"
   on:keydown={(e) => e.key === 'Enter' && play()}
-  on:dragstart={onDragStart}
+  on:dragstart={onUnifiedDragStart}
+  on:dragend={onUnifiedDragEnd}
+  style:transform={reorderPreviewOffset !== 0 ? `translateY(${reorderPreviewOffset}px)` : null}
 >
   <div class="track-item__index" role="gridcell">
+    <div class="track-item__index-main">
     <span class="track-item__num" class:hidden={isCurrentlyPlaying}>
       {index + 1}
     </span>
@@ -151,12 +264,14 @@ function onDragStart(e: DragEvent) {
         </svg>
       {/if}
     </button>
+    </div>
   </div>
 
   <div class="track-item__title-group" role="gridcell">
       <button
         type="button"
         class="track-item__art track-item__art--btn"
+        draggable="false"
         title="Edit title, artist, or cover art"
         aria-label="Edit artwork and details for {track.title}"
         on:click|stopPropagation={openTrackMetadata}
@@ -356,13 +471,15 @@ function onDragStart(e: DragEvent) {
     min-width: 0;
     padding: var(--space-2) 0;
     border-radius: var(--radius-track-row);
-    cursor: default;
+    cursor: grab;
     user-select: none;
-    transition: background var(--duration-fast) var(--ease-out);
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-out);
   }
 
-  .track-item[draggable='true'] {
-    cursor: default;
+  .track-item:active {
+    cursor: grabbing;
   }
 
   .track-item__title-group {
@@ -371,6 +488,11 @@ function onDragStart(e: DragEvent) {
     gap: var(--space-3);
     min-width: 0;
     margin-inline-end: var(--space-3);
+  }
+
+  .track-item__info {
+    cursor: grab;
+    min-width: 0;
   }
 
   .track-item__art {
@@ -461,6 +583,22 @@ function onDragStart(e: DragEvent) {
     outline-offset: -2px;
   }
 
+  .track-item--reorder-target {
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+    border-radius: var(--radius-track-row);
+  }
+
+  .track-item--reorder-source {
+    opacity: 0.28;
+  }
+
+  .track-item--reorder-animate {
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-out),
+      transform 0.15s var(--ease-out);
+  }
+
   /* Index / play button */
   .track-item__index {
     position: relative;
@@ -469,6 +607,16 @@ function onDragStart(e: DragEvent) {
     justify-content: center;
     width: 36px;
     height: 36px;
+    min-width: 0;
+  }
+
+  .track-item__index-main {
+    position: relative;
+    width: 100%;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .track-item__num {
@@ -495,7 +643,7 @@ function onDragStart(e: DragEvent) {
     transition: opacity var(--duration-fast) var(--ease-out);
   }
 
-  .track-item__index:hover .track-item__equalizer {
+  .track-item__index-main:hover .track-item__equalizer {
     opacity: 0;
   }
 
@@ -551,6 +699,7 @@ function onDragStart(e: DragEvent) {
     inset: 0;
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
+    cursor: pointer;
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-out);
   }
@@ -559,11 +708,11 @@ function onDragStart(e: DragEvent) {
     opacity: 1;
   }
 
-  .track-item__index:hover .track-item__play-btn--playing {
+  .track-item__index-main:hover .track-item__play-btn--playing {
     opacity: 1;
   }
 
-  .track-item:hover .track-item__num:not(.hidden) {
+  .track-item:hover .track-item__index-main .track-item__num:not(.hidden) {
     opacity: 0;
   }
 
@@ -823,5 +972,12 @@ function onDragStart(e: DragEvent) {
   .track-item__dance-icon-btn__svg {
     display: block;
     flex-shrink: 0;
+  }
+
+  :global(.track-item--drag-clone-preview) {
+    opacity: 1 !important;
+    background: var(--color-bg-surface) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    border-radius: var(--radius-track-row);
   }
 </style>

@@ -91,7 +91,7 @@ All UI state lives in Svelte stores (`src/renderer/src/stores/`):
 | Store | Owns |
 |-------|------|
 | `player.store.ts` | Playback state, tempo, queue, `sourceDuration`, listener-time derived values |
-| `library.store.ts` | Track list, library folders (`LibraryDirectory[]`), selected dance, search, import/remove; `trackListSort` + `sortTracksForListView` for header-driven ordering; `deferredListPopularityByTrackId` keeps list order/readout stable after **like/dislike on the currently playing** track until context changes (see `voteTrackPopularity`) |
+| `library.store.ts` | Track list, library folders (`LibraryDirectory[]`), selected dance, search, import/remove; `trackListSort` + `sortTracksForListView` for header-driven ordering (`trackListSort.key === 'none'` preserves input order for the “rest” segment when manual ordering applies); `manualListOrderIds` for drag-reorder when shuffle is off; reorder sets `trackListSort` to `none` in the same update so column sort does not snap rows back; shuffle uses `shuffleQueueOrderIds` + weighted random (`weightedShuffleByPopularity`); `deferredListPopularityByTrackId` keeps list order/readout stable after **like/dislike on the currently playing** track until context changes (see `voteTrackPopularity`) |
 | `spotify.store.ts` | Auth state, search results |
 | `ui.store.ts` | Active panel, open modal, notifications |
 

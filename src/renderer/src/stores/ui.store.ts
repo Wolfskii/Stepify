@@ -102,12 +102,11 @@ export const uiActions = {
     const meta =
       modal === 'track-metadata'
         ? (() => {
-            const queue =
-              context?.metadataQueue?.length
-                ? [...context.metadataQueue]
-                : context?.trackId
-                  ? [context.trackId]
-                  : []
+            const queue = context?.metadataQueue?.length
+              ? [...context.metadataQueue]
+              : context?.trackId
+                ? [context.trackId]
+                : []
             const total =
               context?.metadataWizardTotal ??
               (queue.length > 0 ? queue.length : context?.trackId ? 1 : 0)
@@ -115,9 +114,7 @@ export const uiActions = {
               trackMetadataQueueIds: queue,
               trackMetadataWizardTotal: total,
               trackMetadataAfterWizardAssignIds:
-                context?.metadataAfterAssign !== undefined
-                  ? context?.metadataAfterAssign
-                  : null,
+                context?.metadataAfterAssign !== undefined ? context?.metadataAfterAssign : null,
             }
           })()
         : emptyMetadataSlice()

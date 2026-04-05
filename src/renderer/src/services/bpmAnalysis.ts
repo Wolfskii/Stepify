@@ -4,7 +4,11 @@ import { detectBpmFromAudioBuffer } from './bpmDetector'
 const MANUAL_BPM_MIN = 30
 const MANUAL_BPM_MAX = 400
 
-async function persistBpmToLibrary(trackId: string, filePath: string, bpm: number): Promise<boolean> {
+async function persistBpmToLibrary(
+  trackId: string,
+  filePath: string,
+  bpm: number,
+): Promise<boolean> {
   const lower = filePath.toLowerCase()
   const canEmbed = lower.endsWith('.mp3') || lower.endsWith('.flac')
   if (canEmbed) {

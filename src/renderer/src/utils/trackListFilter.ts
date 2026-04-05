@@ -80,6 +80,10 @@ export function sortTracksForListView(
   sort: TrackListSort,
   listDefer?: Record<string, number> | null,
 ): Track[] {
+  if (sort.key === 'none') {
+    return [...tracks]
+  }
+
   const asc = sort.direction === 'asc'
 
   return [...tracks].sort((a, b) => {
@@ -131,16 +135,34 @@ export function sortTracksByPopularity(
   return sortTracksForListView(tracks, DEFAULT_TRACK_LIST_SORT, listDefer)
 }
 
-/** Higher popularity → tends to appear earlier after shuffle (exponential race / Gumbel trick). */
+/**
+ * Shuffle with a mild popularity bias: higher scores tend earlier, but a large uniform
+ * component keeps order unpredictable (not “almost sorted by likes”).
+ */
 export function weightedShuffleByPopularity(
   tracks: Track[],
   listDefer?: Record<string, number> | null,
 ): Track[] {
+  /** Blend toward uniform weight so shuffle stays random-ish. */
+  const bias = 0.38
+  const uniformW = 3.2
   const scored = tracks.map((t) => {
-    const w = Math.max(0.5, 5 + listPopularityForSort(t, listDefer))
+    const popW = Math.max(0.45, 4.2 + listPopularityForSort(t, listDefer) * 0.35)
+    const w = (1 - bias) * uniformW + bias * popW
     const key = -Math.log(Math.random()) / w
     return { t, key }
   })
   scored.sort((a, b) => a.key - b.key)
   return scored.map((x) => x.t)
+}
+
+/** Move the id at `from` to index `to` (same semantics as `Array.splice` move). */
+export function reorderVisibleIds(ids: string[], from: number, to: number): string[] {
+  if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) {
+    return [...ids]
+  }
+  const next = [...ids]
+  const [x] = next.splice(from, 1)
+  next.splice(to, 0, x)
+  return next
 }

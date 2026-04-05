@@ -60,7 +60,9 @@ export async function writeAudioFileMetadata(
     return
   }
 
-  throw new Error(`Writing tags is not supported for ${ext || 'this format'} (supported: .mp3, .flac)`)
+  throw new Error(
+    `Writing tags is not supported for ${ext || 'this format'} (supported: .mp3, .flac)`,
+  )
 }
 
 export function parseDataUrlImage(dataUrl: string): PicturePayload | null {

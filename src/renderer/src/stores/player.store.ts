@@ -161,6 +161,24 @@ export const playerActions = {
     }))
   },
 
+  /** Same tracks as the current queue, new order; keeps the current track as `track` and fixes `queueIndex`. */
+  reorderQueueByOrderedIds(orderedIds: string[]) {
+    playerState.update((s) => {
+      if (s.queue.length === 0 || s.queue.length !== orderedIds.length) return s
+      const byId = new Map(s.queue.map((t) => [t.id, t]))
+      const newQueue: Track[] = []
+      for (const id of orderedIds) {
+        const t = byId.get(id)
+        if (!t) return s
+        newQueue.push(t)
+      }
+      const curId = s.track?.id
+      let newIndex = curId != null ? newQueue.findIndex((t) => t.id === curId) : s.queueIndex
+      if (newIndex < 0) newIndex = s.queueIndex
+      return { ...s, queue: newQueue, queueIndex: newIndex }
+    })
+  },
+
   toggleShuffle() {
     playerState.update((s) => ({ ...s, shuffle: !s.shuffle }))
   },

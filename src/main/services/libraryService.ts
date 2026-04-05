@@ -513,9 +513,7 @@ export const libraryService = {
    * Re-scan every configured library folder (new files indexed, counts updated).
    * Returns the full persisted library and IDs created in this run.
    */
-  async rescanAll(
-    onProgress?: (current: number, total: number) => void,
-  ): Promise<{
+  async rescanAll(onProgress?: (current: number, total: number) => void): Promise<{
     tracks: Track[]
     newTrackIds: string[]
     removedTrackIds: string[]

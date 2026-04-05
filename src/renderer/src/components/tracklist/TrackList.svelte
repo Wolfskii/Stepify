@@ -8,7 +8,9 @@ import {
   libraryDirectories,
   isScanning,
   libraryActions,
+  manualListOrderDisplayActive,
   selectedTrackIds,
+  shuffleListDisplayActive,
   trackListSort,
 } from '../../stores/library.store'
 import type { TrackListSortKey } from '@shared/types'
@@ -17,8 +19,69 @@ import TrackItem from './TrackItem.svelte'
 import { activeModal, uiActions } from '../../stores/ui.store'
 import { pathsFromFileDrop } from '../../utils/dropPaths'
 import { folderBadgeColor } from '../../utils/folderBadgeColor'
+import { TRACK_ASSIGN_DRAG_MIME, TRACK_REORDER_DRAG_MIME } from '../../utils/libraryDrag'
+import { logTrackReorder, logTrackReorderDragOverSample } from '../../utils/trackReorderDebug'
+import {
+  isTrackListReorderDragPending,
+  takeTrackListReorderFromIndex,
+} from '../../utils/trackListReorderDragSession'
+import { computeReorderPreviewOffset } from '../../utils/trackListReorderUi'
+
+function reorderDropTargetIndex(clientX: number, clientY: number): number | null {
+  const hit = document.elementFromPoint(clientX, clientY)?.closest('[data-reorder-index]')
+  if (!hit) return null
+  const v = hit.getAttribute('data-reorder-index')
+  if (v == null) return null
+  const i = Number.parseInt(v, 10)
+  const n = get(filteredTracks).length
+  if (!Number.isFinite(i) || i < 0 || i >= n) return null
+  return i
+}
 
 onMount(() => {
+  const onDocDragOverCapture = (e: DragEvent) => {
+    const pending = isTrackListReorderDragPending()
+    if (pending) {
+      const idx = reorderDropTargetIndex(e.clientX, e.clientY)
+      const top = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      logTrackReorderDragOverSample({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        computedIdx: idx,
+        dropEffectBefore: e.dataTransfer?.dropEffect,
+        topTag: top?.nodeName,
+        topClass: typeof top?.className === 'string' ? top.className.slice(0, 100) : top?.className,
+      })
+      e.preventDefault()
+      const dt = e.dataTransfer
+      if (dt) dt.dropEffect = 'move'
+      if (idx != null) reorderOverIndex = idx
+    }
+  }
+
+  const onDocDropCapture = (e: DragEvent) => {
+    const pending = isTrackListReorderDragPending()
+    if (!pending) return
+
+    const fromIndex = takeTrackListReorderFromIndex()
+    const toIndex = reorderOverIndex
+    logTrackReorder('doc drop capture', { fromIndex, toIndex, reorderFromIndex })
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (fromIndex != null && toIndex != null && fromIndex !== toIndex) {
+      libraryActions.reorderVisibleTracks(fromIndex, toIndex)
+      logTrackReorder('doc drop reorder committed', { fromIndex, toIndex })
+    }
+
+    reorderFromIndex = null
+    reorderOverIndex = null
+  }
+
+  document.addEventListener('dragover', onDocDragOverCapture, true)
+  document.addEventListener('drop', onDocDropCapture, true)
+
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (get(activeModal) != null) return
@@ -35,7 +98,11 @@ onMount(() => {
     }
   }
   window.addEventListener('keydown', onKey)
-  return () => window.removeEventListener('keydown', onKey)
+  return () => {
+    document.removeEventListener('dragover', onDocDragOverCapture, true)
+    document.removeEventListener('drop', onDocDropCapture, true)
+    window.removeEventListener('keydown', onKey)
+  }
 })
 
 function folderBasename(fullPath: string): string {
@@ -64,6 +131,9 @@ $: folderDefaultDance = selectedFolderDir?.defaultDanceId
   ? DANCE_CATEGORIES_BY_ID[selectedFolderDir.defaultDanceId]
   : null
 $: folderViewBadgeAccent = folderBadgeColor(selectedFolderDir?.defaultDanceId)
+/** Hide column-sort carets during shuffle, manual row order, or `sort.key === 'none'`. */
+$: showColumnSortCarets =
+  $trackListSort.key !== 'none' && !$shuffleListDisplayActive && !$manualListOrderDisplayActive
 function addDirectory() {
   void libraryActions.pickAddMusicFolder()
 }
@@ -78,6 +148,9 @@ async function openLibraryFolderOnDisk(absPath: string) {
 let dragDepth = 0
 let dragOver = false
 
+let reorderFromIndex: number | null = null
+let reorderOverIndex: number | null = null
+
 function onDragEnter(e: DragEvent) {
   e.preventDefault()
   dragDepth++
@@ -91,19 +164,39 @@ function onDragLeave(e: DragEvent) {
 }
 
 function onDragOver(e: DragEvent) {
+  const dt = e.dataTransfer
+  if (!dt) return
   e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  // Row handlers set dropEffect = move first; bubbling here must not overwrite with copy
+  // or Electron may reject internal reorder drops.
+  if (dt.types.includes('Files')) {
+    dt.dropEffect = 'copy'
+    return
+  }
+  if (dt.types.includes(TRACK_REORDER_DRAG_MIME) || isTrackListReorderDragPending()) {
+    dt.dropEffect = 'move'
+    return
+  }
+  if (dt.types.includes(TRACK_ASSIGN_DRAG_MIME)) {
+    dt.dropEffect = 'copy'
+    return
+  }
+  dt.dropEffect = 'none'
 }
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
   dragDepth = 0
   dragOver = false
+  if (isTrackListReorderDragPending()) return
   const paths = pathsFromFileDrop(e.dataTransfer)
   if (paths.length) void libraryActions.addMusicFoldersFromDroppedPaths(paths)
 }
 
 function ariaSortAttr(key: TrackListSortKey): 'ascending' | 'descending' | 'none' {
+  if ($trackListSort.key === 'none' || $shuffleListDisplayActive || $manualListOrderDisplayActive) {
+    return 'none'
+  }
   if ($trackListSort.key !== key) return 'none'
   return $trackListSort.direction === 'asc' ? 'ascending' : 'descending'
 }
@@ -217,7 +310,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
           <button
             type="button"
             class="track-list__col-header"
-            class:track-list__col-header--active={$trackListSort.key === 'title'}
             aria-label="Sort by title. {$trackListSort.key === 'title'
               ? $trackListSort.direction === 'asc'
                 ? 'Ascending'
@@ -226,7 +318,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('title')}
           >
             <span>Title</span>
-            {#if $trackListSort.key === 'title'}
+            {#if showColumnSortCarets && $trackListSort.key === 'title'}
               <svg
                 class="track-list__sort-caret"
                 class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
@@ -256,7 +348,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             <button
               type="button"
               class="track-list__col-header track-list__col-header--icon"
-              class:track-list__col-header--active={$trackListSort.key === 'duration'}
               title="Sort by track length"
               aria-label="Sort by duration. {$trackListSort.key === 'duration'
                 ? $trackListSort.direction === 'asc'
@@ -282,7 +373,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
                   stroke-linejoin="round"
                 />
               </svg>
-              {#if $trackListSort.key === 'duration'}
+              {#if showColumnSortCarets && $trackListSort.key === 'duration'}
                 <svg
                   class="track-list__sort-caret track-list__sort-caret--meta"
                   class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
@@ -311,7 +402,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             <button
               type="button"
               class="track-list__col-header track-list__col-header--bpm"
-              class:track-list__col-header--active={$trackListSort.key === 'bpm'}
               aria-label="Sort by BPM. {$trackListSort.key === 'bpm'
                 ? $trackListSort.direction === 'asc'
                   ? 'Ascending'
@@ -320,7 +410,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
               on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('bpm')}
             >
               <span>BPM</span>
-              {#if $trackListSort.key === 'bpm'}
+              {#if showColumnSortCarets && $trackListSort.key === 'bpm'}
                 <svg
                   class="track-list__sort-caret"
                   class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
@@ -349,7 +439,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
             <button
               type="button"
               class="track-list__col-header track-list__col-header--icon"
-              class:track-list__col-header--active={$trackListSort.key === 'popularity'}
               title="Sort by likes minus dislikes"
               aria-label="Sort by popularity. {$trackListSort.key === 'popularity'
                 ? $trackListSort.direction === 'asc'
@@ -370,7 +459,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
                   d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"
                 />
               </svg>
-              {#if $trackListSort.key === 'popularity'}
+              {#if showColumnSortCarets && $trackListSort.key === 'popularity'}
                 <svg
                   class="track-list__sort-caret track-list__sort-caret--meta"
                   class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
@@ -400,7 +489,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
               <button
                 type="button"
                 class="track-list__col-header track-list__col-header--dance"
-                class:track-list__col-header--active={$trackListSort.key === 'dance'}
                 aria-label="Sort by dance. {$trackListSort.key === 'dance'
                   ? $trackListSort.direction === 'asc'
                     ? 'Ascending'
@@ -409,7 +497,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
                 on:click|stopPropagation={() => void libraryActions.toggleTrackListSort('dance')}
               >
                 <span>Dance</span>
-                {#if $trackListSort.key === 'dance'}
+                {#if showColumnSortCarets && $trackListSort.key === 'dance'}
                   <svg
                     class="track-list__sort-caret"
                     class:track-list__sort-caret--asc={$trackListSort.direction === 'asc'}
@@ -450,9 +538,10 @@ function onTrackListBackgroundClick(e: MouseEvent) {
         {#if $selectedDanceId}
           <p>No tracks assigned to this dance yet.</p>
           <p class="track-list__hint">
-            From <strong>All Tracks</strong>: drag rows onto a dance in the sidebar, or use
-            <strong>Ctrl/Cmd+click</strong> / <strong>Shift+click</strong> to select several, then drag
-            onto a dance. You can also use the dance column on each row there to set or change the dance.
+            From <strong>All Tracks</strong>: drag the <strong>title / artist text</strong> onto a dance
+            in the sidebar, or use <strong>Ctrl/Cmd+click</strong> / <strong>Shift+click</strong> to select
+            several, then drag from a row’s title text onto a dance. Drag elsewhere on the row (not play,
+            artwork, BPM, or dance controls) to <strong>reorder</strong>. You can also use the dance column on each row there to set or change the dance.
             On this screen, use the <strong>tag icon</strong> on each row to change dance or set
             <strong>None</strong>. <strong>Delete</strong> / <strong>Backspace</strong> still removes the
             selected tracks from this dance only.
@@ -479,6 +568,17 @@ function onTrackListBackgroundClick(e: MouseEvent) {
           queue={$filteredTracks}
           filterDanceId={$selectedDanceId}
           filterFolderPath={$selectedFolderPath}
+          reorderDropHighlight={reorderFromIndex !== null && reorderOverIndex === i}
+          reorderSourceRow={reorderFromIndex === i}
+          reorderPreviewOffset={computeReorderPreviewOffset(i, reorderFromIndex, reorderOverIndex)}
+          reorderAnimating={reorderFromIndex !== null}
+          on:reorderdragstart={(e) => {
+            reorderFromIndex = e.detail.index
+          }}
+          on:reorderdragend={() => {
+            reorderFromIndex = null
+            reorderOverIndex = null
+          }}
         />
       {/each}
     {/if}
@@ -691,10 +791,6 @@ function onTrackListBackgroundClick(e: MouseEvent) {
     color: var(--color-text-primary);
   }
 
-  .track-list__col-header--active {
-    color: var(--color-accent);
-  }
-
   .track-list__col-header:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
@@ -713,8 +809,10 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   }
 
   .track-list__col-header--icon {
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
   }
 
   .track-list__col-header--bpm {
@@ -734,7 +832,7 @@ function onTrackListBackgroundClick(e: MouseEvent) {
   }
 
   .track-list__sort-caret--meta {
-    margin-top: 1px;
+    margin-top: 0;
   }
 
   .track-list__sort-caret--asc {

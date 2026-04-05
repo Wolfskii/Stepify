@@ -119,8 +119,10 @@ The tempo slider is the most important UI element. It must feel premium.
 
 ### Track list interactions
 
-- **Assign dance** — Per-row **+**, drag onto sidebar dance, or multi-select (click / Ctrl / Shift) and drag the selection.
-- **Column sort** — Header buttons on **Title**, **Duration**, **BPM**, **Likes**, and **Dance** (when not in a single-dance filter) sort the visible list; a second click reverses direction. Choosing a sort clears an active shuffle display order for that list. Default order remains popularity-based until the user picks a column.
+- **Assign dance** — Per-row **+**, or drag **title / artist text** onto a sidebar dance; multi-select (click / Ctrl / Shift) and drag from title text the same way.
+- **Reorder in list** — Drag the **row** (not play, artwork, BPM, or dance controls) to change order. With shuffle off, this becomes a **custom list order** that persists when switching between views (dances, folders, All Tracks); returning to the view shows the custom order again. Custom order is cleared by: clicking a **sort column header**, toggling **shuffle**, or **restarting the app**. Column-sort carets are hidden while order is custom. If playback was started from that same list, the **player queue** follows. With shuffle on, reorder updates the shuffled sequence (carets stay hidden while shuffle order drives the list).
+- **Column sort** — Header buttons on **Title**, **Duration**, **BPM**, **Likes**, and **Dance** (when not in a single-dance filter) sort the visible list; styling stays neutral (no accent on the “active” column). A second click on the same header reverses direction. Choosing a sort clears manual order and shuffle display order for that list. Default order remains popularity-based until the user picks a column.
+- **Shuffle** — Random order with a **light** bias toward higher popularity (still varied, not “likes-first”).
 - **Seek bar times** — Elapsed and total show **listening (wall-clock) time at the current tempo** (slower tempo ⇒ longer displayed duration). The bar still seeks by position in the underlying file.
 
 ---
