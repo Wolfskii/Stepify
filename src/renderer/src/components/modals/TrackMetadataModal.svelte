@@ -1,4 +1,5 @@
 <script lang="ts">
+import { onDestroy } from 'svelte'
 import { get } from 'svelte/store'
 import type { MetadataSearchHit } from '@shared/types'
 import {
@@ -9,6 +10,7 @@ import {
   uiActions,
 } from '../../stores/ui.store'
 import { libraryState, libraryActions } from '../../stores/library.store'
+import { fileToCoverEmbedDataUrl } from '../../utils/coverEmbed'
 import { buildDefaultCatalogSearchQuery, buildMetadataSearchQuery } from '../../utils/metadataQuery'
 
 const RESULTS_PAGE_SIZE = 5
@@ -38,7 +40,9 @@ let manualArtist = ''
 let manualAlbum = ''
 /** Editable online catalog search query (pre-filled from filename/tags). */
 let manualSearchQuery = ''
-let manualCoverDataUrl: string | undefined
+/** Picked cover file; encoded to JPEG before send so tags get a standard embedded image. */
+let manualCoverFile: File | undefined
+let manualCoverPreviewUrl: string | undefined
 let lastInitId: string | null = null
 let searchSeededFor: string | null = null
 let coverFileInput: HTMLInputElement
@@ -64,13 +68,25 @@ $: pageHits =
         searchPage * RESULTS_PAGE_SIZE + RESULTS_PAGE_SIZE,
       )
 
+function revokeCoverPreview(): void {
+  if (manualCoverPreviewUrl) {
+    URL.revokeObjectURL(manualCoverPreviewUrl)
+    manualCoverPreviewUrl = undefined
+  }
+}
+
+onDestroy(() => {
+  revokeCoverPreview()
+})
+
 $: if (currentTrackId !== lastInitId) {
   lastInitId = currentTrackId ?? null
   hits = []
   searchPage = 0
   searchFetchFailed = false
   showManual = false
-  manualCoverDataUrl = undefined
+  revokeCoverPreview()
+  manualCoverFile = undefined
   if (track) {
     manualTitle = track.title
     manualArtist = track.artist
@@ -180,6 +196,17 @@ async function applyManual() {
     uiActions.notify('Title and artist are required', 'warning')
     return
   }
+  let coverDataUrl: string | undefined
+  if (manualCoverFile) {
+    coverDataUrl = await fileToCoverEmbedDataUrl(manualCoverFile)
+    if (!coverDataUrl) {
+      uiActions.notify(
+        'Could not use that image as cover (try JPEG or PNG, or a smaller file)',
+        'error',
+      )
+      return
+    }
+  }
   busy = true
   try {
     const r = await window.electronAPI.library.updateTrackMetadata({
@@ -187,7 +214,7 @@ async function applyManual() {
       title,
       artist,
       album: manualAlbum.trim() || undefined,
-      coverDataUrl: manualCoverDataUrl,
+      coverDataUrl,
     })
     if (!r.success || !r.data) {
       uiActions.notify(r.error ?? 'Could not save', 'error')
@@ -209,11 +236,9 @@ function onCoverPick(e: Event) {
   const input = e.currentTarget as HTMLInputElement
   const f = input.files?.[0]
   if (!f) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    manualCoverDataUrl = typeof reader.result === 'string' ? reader.result : undefined
-  }
-  reader.readAsDataURL(f)
+  revokeCoverPreview()
+  manualCoverFile = f
+  manualCoverPreviewUrl = URL.createObjectURL(f)
   input.value = ''
 }
 
@@ -408,8 +433,8 @@ function fileLabel(path: string | undefined): string {
               class="sr-only"
               on:change={onCoverPick}
             />
-            {#if manualCoverDataUrl}
-              <img class="manual__preview" src={manualCoverDataUrl} alt="Cover preview" />
+            {#if manualCoverPreviewUrl}
+              <img class="manual__preview" src={manualCoverPreviewUrl} alt="Cover preview" />
             {/if}
           </div>
           <button type="button" class="modal__primary manual__save" disabled={busy} on:click={applyManual}>

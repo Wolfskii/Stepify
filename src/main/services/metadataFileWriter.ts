@@ -64,10 +64,14 @@ export async function writeAudioFileMetadata(
 }
 
 export function parseDataUrlImage(dataUrl: string): PicturePayload | null {
-  const m = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl.trim())
-  if (!m) return null
-  const mime = m[1].trim()
-  const b64 = m[2].replace(/\s/g, '')
+  const trimmed = dataUrl.trim()
+  const lower = trimmed.toLowerCase()
+  if (!lower.startsWith('data:')) return null
+  const b64Idx = lower.indexOf(';base64,')
+  if (b64Idx === -1) return null
+  const header = trimmed.slice('data:'.length, b64Idx)
+  const mime = header.split(';')[0]?.trim() || 'image/jpeg'
+  const b64 = trimmed.slice(b64Idx + ';base64,'.length).replace(/\s/g, '')
   try {
     const buffer = Buffer.from(b64, 'base64')
     if (buffer.length === 0) return null
