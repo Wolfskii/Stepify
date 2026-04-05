@@ -5,21 +5,34 @@ import {
   adjustedBpm,
   referenceBpmInfo,
 } from '../../stores/player.store'
+import { uiActions } from '../../stores/ui.store'
 
 export let compact = false
 
 $: ref = $referenceBpmInfo
 $: isAdjusted = $tempoPercent !== 0
 $: baseBpm = ref?.bpm ?? null
+
+function openEditBpm() {
+  const t = $currentTrack
+  if (t) uiActions.openModal('edit-bpm', { trackId: t.id })
+}
 </script>
 
 <div class="bpm-display" class:bpm-display--compact={compact} aria-label="BPM information">
   {#if ref && baseBpm != null}
     <div class="bpm-display__row">
-      <div class="bpm-display__value" class:adjusted={isAdjusted}>
+      <button
+        type="button"
+        class="bpm-display__value bpm-display__clickable"
+        class:adjusted={isAdjusted}
+        title="Edit BPM"
+        aria-label="Edit BPM"
+        on:click={openEditBpm}
+      >
         {$adjustedBpm ?? baseBpm}
         <span class="bpm-display__unit">BPM</span>
-      </div>
+      </button>
 
       {#if isAdjusted && !compact}
         <div
@@ -52,10 +65,18 @@ $: baseBpm = ref?.bpm ?? null
       </div>
     {/if}
   {:else if $currentTrack}
-    <div class="bpm-display__empty">— BPM</div>
+    <button
+      type="button"
+      class="bpm-display__empty bpm-display__clickable"
+      title="Set or detect BPM"
+      aria-label="Set or detect BPM"
+      on:click={openEditBpm}
+    >
+      — BPM
+    </button>
     {#if !compact}
       <p class="bpm-display__empty-hint">
-        Tag a dance in the list, or use a file with BPM in its metadata.
+        Tag a dance in the list, or use a file with BPM in its metadata. Click to set BPM.
       </p>
     {/if}
   {:else}
@@ -89,6 +110,26 @@ $: baseBpm = ref?.bpm ?? null
     align-items: baseline;
     gap: var(--space-1);
     transition: color var(--duration-normal) var(--ease-out);
+  }
+
+  .bpm-display__clickable {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+    text-align: inherit;
+  }
+
+  .bpm-display__clickable:hover {
+    opacity: 0.92;
+  }
+
+  .bpm-display__clickable:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 
   .bpm-display__value.adjusted {

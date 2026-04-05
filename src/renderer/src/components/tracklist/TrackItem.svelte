@@ -56,6 +56,10 @@ function openAssignDance() {
   uiActions.openModal('assign-dance', { trackId: track.id })
 }
 
+function openEditBpm() {
+  uiActions.openModal('edit-bpm', { trackId: track.id })
+}
+
 async function removeFromCurrentDance() {
   if (!filterDanceId) return
   await libraryActions.unassignTracksFromDance([track.id], filterDanceId)
@@ -195,12 +199,26 @@ function onDragStart(e: DragEvent) {
     </div>
 
     {#if track.bpm}
-      <div class="track-item__bpm">
+      <button
+        type="button"
+        class="track-item__bpm track-item__bpm--btn"
+        title="Edit BPM"
+        aria-label="Edit BPM for {track.title}"
+        on:click|stopPropagation={openEditBpm}
+      >
         <span>{track.bpm}</span>
         <span class="track-item__bpm-unit">BPM</span>
-      </div>
+      </button>
     {:else}
-      <div class="track-item__bpm track-item__bpm--empty">—</div>
+      <button
+        type="button"
+        class="track-item__bpm track-item__bpm--empty track-item__bpm--btn"
+        title="Set BPM"
+        aria-label="Set BPM for {track.title}"
+        on:click|stopPropagation={openEditBpm}
+      >
+        —
+      </button>
     {/if}
 
     <div class="track-item__duration">
@@ -560,6 +578,21 @@ function onDragStart(e: DragEvent) {
   .track-item__bpm-unit {
     font-size: 10px;
     color: var(--color-text-muted);
+  }
+
+  .track-item__bpm--btn {
+    font-family: inherit;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+  }
+
+  .track-item__bpm--btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 
   /* Duration — centered under clock column header */

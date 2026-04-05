@@ -36,6 +36,8 @@ export const IPC_LIBRARY = {
   SAVE_DETECTED_BPM: 'library:save-detected-bpm',
   /** Persist BPM on library track only (no file write), e.g. when format cannot embed TBPM */
   SET_TRACK_BPM: 'library:set-track-bpm',
+  /** Remove stored BPM from the library track (does not strip file tags) */
+  CLEAR_TRACK_BPM: 'library:clear-track-bpm',
 } as const
 
 // ─── Audio Channels ───────────────────────────────────────────────────────────

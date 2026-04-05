@@ -94,6 +94,17 @@ export const libraryService = {
     return true
   },
 
+  clearTrackBpm(trackId: string): boolean {
+    const tracks = libraryStore.get('tracks', {})
+    const track = tracks[trackId]
+    if (!track) return false
+    const next: Track = { ...track }
+    delete next.bpm
+    tracks[trackId] = next
+    libraryStore.set('tracks', tracks)
+    return true
+  },
+
   removeTrack(trackId: string): boolean {
     const tracks = libraryStore.get('tracks', {})
     if (!tracks[trackId]) return false
@@ -184,15 +195,20 @@ export const libraryService = {
     }
   },
 
-  async rescanAll(onProgress?: (current: number, total: number) => void): Promise<Track[]> {
+  /**
+   * Re-scan every configured library folder (new files indexed, counts updated).
+   * Returns the full persisted library and IDs created in this run.
+   */
+  async rescanAll(
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<{ tracks: Track[]; newTrackIds: string[] }> {
     const dirs = settingsService.getLibraryDirectories()
-    const allTracks: Track[] = []
+    const allNewIds: string[] = []
 
     for (const dir of dirs) {
-      const { tracks } = await this.scanDirectory(dir.path, onProgress)
-      allTracks.push(...tracks)
+      const { tracks, newTrackIds } = await this.scanDirectory(dir.path, onProgress)
+      allNewIds.push(...newTrackIds)
 
-      // Update track count on the directory record
       settingsService.set({
         libraryDirectories: settingsService
           .getLibraryDirectories()
@@ -200,6 +216,9 @@ export const libraryService = {
       })
     }
 
-    return allTracks
+    return {
+      tracks: this.getAllTracks(),
+      newTrackIds: [...new Set(allNewIds)],
+    }
   },
 }

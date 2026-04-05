@@ -7,6 +7,7 @@ type Modal =
   | 'settings'
   | 'assign-dance'
   | 'assign-folder-dance'
+  | 'edit-bpm'
   | null
 
 interface UiState {
@@ -17,6 +18,8 @@ interface UiState {
   assignDanceTrackId: string | null
   /** New track IDs after adding a folder — optional bulk dance assign */
   folderAssignTrackIds: string[] | null
+  /** Track ID for BPM edit modal */
+  editBpmTrackId: string | null
   notifications: Notification[]
 }
 
@@ -33,6 +36,7 @@ const initialState: UiState = {
   sidebarCollapsed: false,
   assignDanceTrackId: null,
   folderAssignTrackIds: null,
+  editBpmTrackId: null,
   notifications: [],
 }
 
@@ -44,6 +48,7 @@ export const activePanel = derived(uiState, ($s) => $s.activePanel)
 export const activeModal = derived(uiState, ($s) => $s.activeModal)
 export const assignDanceTrackId = derived(uiState, ($s) => $s.assignDanceTrackId)
 export const folderAssignTrackIds = derived(uiState, ($s) => $s.folderAssignTrackIds)
+export const editBpmTrackId = derived(uiState, ($s) => $s.editBpmTrackId)
 export const sidebarCollapsed = derived(uiState, ($s) => $s.sidebarCollapsed)
 export const notifications = derived(uiState, ($s) => $s.notifications)
 
@@ -63,6 +68,7 @@ export const uiActions = {
       assignDanceTrackId: modal === 'assign-dance' ? (context?.trackId ?? null) : null,
       folderAssignTrackIds:
         modal === 'assign-folder-dance' ? (context?.folderTrackIds ?? []) : null,
+      editBpmTrackId: modal === 'edit-bpm' ? (context?.trackId ?? null) : null,
     }))
   },
 
@@ -72,6 +78,7 @@ export const uiActions = {
       activeModal: null,
       assignDanceTrackId: null,
       folderAssignTrackIds: null,
+      editBpmTrackId: null,
     }))
   },
 

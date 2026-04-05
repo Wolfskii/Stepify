@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "chokidar": "^3.6.0",
     "electron-store": "^8.2.0",
     "fast-glob": "^3.3.2",
     "flac-tagger": "^2.0.0",

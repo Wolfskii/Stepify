@@ -45,7 +45,8 @@ const api = {
     unassignDance: (trackId: string, danceId: DanceId): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.UNASSIGN_DANCE, trackId, danceId),
 
-    rescan: (): Promise<IpcResponse<void>> => ipcRenderer.invoke(IPC_LIBRARY.RESCAN),
+    rescan: (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.RESCAN),
 
     saveDetectedBpm: (payload: {
       trackId: string
@@ -55,6 +56,9 @@ const api = {
 
     setTrackBpm: (trackId: string, bpm: number): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.SET_TRACK_BPM, trackId, bpm),
+
+    clearTrackBpm: (trackId: string): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke(IPC_LIBRARY.CLEAR_TRACK_BPM, trackId),
 
     onScanComplete: (callback: (payload: { tracks: Track[]; newTrackIds: string[] }) => void) => {
       ipcRenderer.on(IPC_LIBRARY.SCAN_COMPLETE, (_event, payload) => callback(payload))

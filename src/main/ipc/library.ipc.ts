@@ -1,6 +1,7 @@
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC_LIBRARY } from '../../shared/ipc-channels'
 import type { DanceId, IpcResponse, LibraryDirectory, Track } from '../../shared/types'
+import { restartLibraryFolderWatcher } from '../services/libraryFolderWatcher'
 import { libraryService } from '../services/libraryService'
 import { writeBpmToAudioFile } from '../services/metadataBpmWriter'
 import { settingsService } from '../services/settingsService'
@@ -47,6 +48,8 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
 
       const newTrackIds = [...new Set(allNewIds)]
 
+      restartLibraryFolderWatcher(mainWindow)
+
       return { success: true, data: { tracks: allTracks, newTrackIds } }
     },
   )
@@ -56,6 +59,7 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
     async (_event, path: string): Promise<IpcResponse<{ removedTrackIds: string[] }>> => {
       const removedTrackIds = libraryService.removeTracksUnderDirectory(path)
       settingsService.removeLibraryDirectory(path)
+      restartLibraryFolderWatcher(mainWindow)
       return { success: true, data: { removedTrackIds } }
     },
   )
@@ -102,12 +106,15 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
     },
   )
 
-  ipcMain.handle(IPC_LIBRARY.RESCAN, async (): Promise<IpcResponse<void>> => {
-    await libraryService.rescanAll((current, total) => {
-      mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
-    })
-    return { success: true }
-  })
+  ipcMain.handle(
+    IPC_LIBRARY.RESCAN,
+    async (): Promise<IpcResponse<{ tracks: Track[]; newTrackIds: string[] }>> => {
+      const data = await libraryService.rescanAll((current, total) => {
+        mainWindow.webContents.send(IPC_LIBRARY.SCAN_PROGRESS, { current, total })
+      })
+      return { success: true, data }
+    },
+  )
 
   ipcMain.handle(
     IPC_LIBRARY.SAVE_DETECTED_BPM,
@@ -139,4 +146,14 @@ export function registerLibraryIpc(mainWindow: BrowserWindow): void {
       return ok ? { success: true } : { success: false, error: 'Track not found' }
     },
   )
+
+  ipcMain.handle(
+    IPC_LIBRARY.CLEAR_TRACK_BPM,
+    async (_event, trackId: string): Promise<IpcResponse<void>> => {
+      const ok = libraryService.clearTrackBpm(trackId)
+      return ok ? { success: true } : { success: false, error: 'Track not found' }
+    },
+  )
+
+  restartLibraryFolderWatcher(mainWindow)
 }

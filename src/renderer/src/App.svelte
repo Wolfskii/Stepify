@@ -25,14 +25,31 @@ onMount(async () => {
     initDanceOrdersFromSettings(settingsResult.data)
   }
 
-  // Check Spotify auth state
-  await spotifyService.checkAuthStatus()
-
-  // Register IPC scan progress / complete listeners
   window.electronAPI.library.onScanProgress((progress) => {
     libraryActions.setScanning(true)
     libraryActions.setScanProgress(progress)
   })
+
+  window.electronAPI.library.onScanComplete((payload) => {
+    void libraryActions.applyDiskSyncFromMain(payload, 'file-watcher')
+  })
+
+  // Re-scan configured folders for files added while the app was closed (or missed).
+  if (dirsResult.success && dirsResult.data && dirsResult.data.length > 0) {
+    libraryActions.setScanning(true)
+    try {
+      const sync = await window.electronAPI.library.rescan()
+      if (sync.success && sync.data) {
+        await libraryActions.applyDiskSyncFromMain(sync.data, 'startup')
+      }
+    } finally {
+      libraryActions.setScanning(false)
+      libraryActions.setScanProgress(null)
+    }
+  }
+
+  // Check Spotify auth state
+  await spotifyService.checkAuthStatus()
 
   // Global keyboard shortcuts
   window.addEventListener('keydown', handleGlobalKey)

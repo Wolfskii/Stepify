@@ -7,6 +7,7 @@ import { sidebarCollapsed } from '../../stores/ui.store'
 import Notifications from './Notifications.svelte'
 import AssignDanceModal from '../modals/AssignDanceModal.svelte'
 import AssignFolderDanceModal from '../modals/AssignFolderDanceModal.svelte'
+import EditBpmModal from '../modals/EditBpmModal.svelte'
 </script>
 
 <div class="app-shell">
@@ -27,6 +28,7 @@ import AssignFolderDanceModal from '../modals/AssignFolderDanceModal.svelte'
   <Notifications />
   <AssignDanceModal />
   <AssignFolderDanceModal />
+  <EditBpmModal />
 </div>
 
 <style>

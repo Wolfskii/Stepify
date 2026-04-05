@@ -1,6 +1,7 @@
 import { DANCE_CATEGORIES, DANCE_CATEGORIES_BY_ID } from '@shared/constants'
 import type { DanceId, LibraryDirectory, Track } from '@shared/types'
 import { derived, get, writable } from 'svelte/store'
+import { resolveBpmForLocalTrack } from '../services/bpmAnalysis'
 import { uiActions } from './ui.store'
 
 interface LibraryState {
@@ -160,6 +161,7 @@ export const libraryActions = {
       if (n > 0) {
         uiActions.openModal('assign-folder-dance', { folderTrackIds: r.data.newTrackIds })
         uiActions.notify(`Added ${n} new ${n === 1 ? 'track' : 'tracks'}`, 'success')
+        void libraryActions.fillMissingBpmForTrackIds(r.data.newTrackIds)
       } else {
         uiActions.notify('Folder is already fully indexed', 'info')
       }
@@ -360,5 +362,90 @@ export const libraryActions = {
       ...s,
       tracks: s.tracks.map((t) => (t.id === trackId ? { ...t, ...patch } : t)),
     }))
+  },
+
+  clearTrackBpmInState(trackId: string) {
+    libraryState.update((s) => ({
+      ...s,
+      tracks: s.tracks.map((t) => {
+        if (t.id !== trackId) return t
+        const next = { ...t }
+        delete next.bpm
+        return next
+      }),
+    }))
+  },
+
+  /**
+   * After importing tracks, detect BPM for local files that have none (tags + analysis).
+   * Runs in the background; does not block the UI.
+   */
+  async fillMissingBpmForTrackIds(
+    trackIds: string[],
+    options: { silentBpmToast?: boolean } = {},
+  ) {
+    const s = get(libraryState)
+    const toAnalyze = trackIds
+      .map((id) => s.tracks.find((t) => t.id === id))
+      .filter((t): t is Track => !!t)
+      .filter(
+        (t) => t.source === 'local' && t.localPath && !(t.bpm != null && t.bpm > 0),
+      )
+
+    if (toAnalyze.length === 0) return
+
+    let ok = 0
+    const { playerActions } = await import('./player.store')
+
+    for (const track of toAnalyze) {
+      const bpm = await resolveBpmForLocalTrack(track, { forceDetect: false })
+      if (bpm != null) {
+        playerActions.mergeCurrentTrackBpm(bpm, track.id)
+        ok++
+      }
+    }
+
+    if (ok > 0 && !options.silentBpmToast) {
+      uiActions.notify(
+        ok === 1 ? 'Filled in BPM for 1 new track' : `Filled in BPM for ${ok} new tracks`,
+        'success',
+      )
+    }
+  },
+
+  /**
+   * Apply a disk rescan result from main (startup sync, folder watcher, or manual rescan).
+   */
+  async applyDiskSyncFromMain(
+    data: { tracks: Track[]; newTrackIds: string[] },
+    source: 'startup' | 'file-watcher' | 'manual-rescan',
+  ) {
+    libraryActions.mergeTracksFromScan(data.tracks)
+    await libraryActions.refreshLibraryDirectories()
+    const n = data.newTrackIds.length
+    if (n === 0) return
+
+    if (source !== 'file-watcher') {
+      uiActions.openModal('assign-folder-dance', { folderTrackIds: data.newTrackIds })
+    }
+
+    const silentBpm = source === 'file-watcher' || source === 'startup'
+    void libraryActions.fillMissingBpmForTrackIds(data.newTrackIds, { silentBpmToast: silentBpm })
+
+    if (source === 'startup') {
+      uiActions.notify(
+        n === 1
+          ? 'Found 1 new track in library folders'
+          : `Found ${n} new tracks in library folders`,
+        'success',
+      )
+    } else if (source === 'file-watcher') {
+      uiActions.notify(
+        n === 1
+          ? '1 new track added from a library folder'
+          : `${n} new tracks added from library folders`,
+        'success',
+      )
+    }
   },
 }

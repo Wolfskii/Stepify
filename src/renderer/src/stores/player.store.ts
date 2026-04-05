@@ -270,6 +270,20 @@ export const playerActions = {
     }))
   },
 
+  /** Remove BPM from queue/current track in memory (after library clear). */
+  stripTrackBpm(trackId: string) {
+    const strip = (t: Track): Track => {
+      const next = { ...t }
+      delete next.bpm
+      return next
+    }
+    playerState.update((s) => ({
+      ...s,
+      queue: s.queue.map((t) => (t.id === trackId ? strip(t) : t)),
+      track: s.track?.id === trackId ? strip(s.track) : s.track,
+    }))
+  },
+
   /** After one or more tracks were removed from the library (paths or IDs). */
   onLibraryRemovedTracks(trackIds: string[]) {
     if (trackIds.length === 0) return
