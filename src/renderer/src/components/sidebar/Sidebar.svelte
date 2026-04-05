@@ -62,25 +62,6 @@ function showAllTracks() {
 </script>
 
 <nav class="sidebar">
-  <!-- Logo / Brand -->
-  <div class="sidebar__brand">
-    <div class="sidebar__logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M9 18V5l12-2v13"
-          stroke="var(--color-accent)"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-        <circle cx="6" cy="18" r="3" stroke="var(--color-accent)" stroke-width="2"/>
-        <circle cx="18" cy="16" r="3" stroke="var(--color-accent)" stroke-width="2"/>
-      </svg>
-    </div>
-    <span class="sidebar__app-name">Stepify</span>
-  </div>
-
-  <!-- Search -->
   <div class="sidebar__search">
     <SearchBar />
   </div>
@@ -217,32 +198,6 @@ function showAllTracks() {
     gap: var(--space-1);
     overflow-y: auto;
     overflow-x: hidden;
-  }
-
-  .sidebar__brand {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1) var(--space-1) var(--space-3);
-    margin-bottom: var(--space-1);
-  }
-
-  .sidebar__logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: var(--color-accent-muted);
-    border-radius: var(--radius-md);
-    flex-shrink: 0;
-  }
-
-  .sidebar__app-name {
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--color-text-primary);
   }
 
   .sidebar__search {
