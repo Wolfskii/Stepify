@@ -9,6 +9,11 @@ import {
   queue,
   listenerElapsed,
   listenerDuration,
+  displaySourceDuration,
+  syncAudioEnginePlaybackCap,
+  isPlaybackBreak,
+  currentBreakLabel,
+  isQueueBreakItem,
 } from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
 import { uiActions } from '../../stores/ui.store'
@@ -16,9 +21,8 @@ import { libraryActions, libraryState } from '../../stores/library.store'
 import { onMount, onDestroy } from 'svelte'
 import type { RepeatMode } from '@shared/types'
 
-$: sourceDuration =
-  $playerState.sourceDuration > 0 ? $playerState.sourceDuration : ($currentTrack?.duration ?? 0)
-$: progress = sourceDuration > 0 ? ($currentTime / sourceDuration) * 100 : 0
+$: scrubDuration = $displaySourceDuration
+$: progress = scrubDuration > 0 ? ($currentTime / scrubDuration) * 100 : 0
 $: displayElapsed = $listenerElapsed
 $: displayTotal = $listenerDuration
 
@@ -33,6 +37,8 @@ $: canNext =
 
 $: currentInLibrary =
   $currentTrack != null && $libraryState.tracks.some((t) => t.id === $currentTrack.id)
+
+$: canOperateSegment = $playerState.queueIndex >= 0 && $queue.length > 0
 
 /** Mirrors main-process cooldown so we skip pointless IPC; main is authoritative. */
 const TRACK_VOTE_COOLDOWN_MS = 10 * 60 * 1000
@@ -96,24 +102,99 @@ function buildScrubBarGradient(fillPct: number, hoverPct: number, opts: ScrubGra
   return `linear-gradient(to right, ${fillCol} 0%, ${fillCol} ${p}%, ${preview} ${p}%, ${preview} ${h}%, ${rest} ${h}%, ${rest} 100%)`
 }
 
-async function loadAndPlayFromStore() {
-  const t = get(currentTrack)
+let breakRaf: number | null = null
+let breakWallStart = 0
+let breakElapsedAnchor = 0
+let wasPlayingBreak = false
+
+function stopBreakTicker() {
+  if (breakRaf != null) {
+    cancelAnimationFrame(breakRaf)
+    breakRaf = null
+  }
+}
+
+/** After scrubbing a playing break, re-anchor the RAF ticker so elapsed is not overwritten next frame. */
+function syncBreakTickerAfterUserSeek(seconds: number) {
   const st = get(playerState)
-  if (!t) return
-  await audioEngine.load(t)
+  if (!st.isPlaying || !isQueueBreakItem(st)) return
+  breakWallStart = performance.now()
+  breakElapsedAnchor = seconds
+}
+
+function tickBreak() {
+  const st = get(playerState)
+  if (!st.isPlaying || !isQueueBreakItem(st)) {
+    breakRaf = null
+    return
+  }
+  const elapsed = breakElapsedAnchor + (performance.now() - breakWallStart) / 1000
+  const total = st.sourceDuration
+  if (elapsed >= total) {
+    playerActions.setCurrentTime(total)
+    stopBreakTicker()
+    void handleSegmentEnded()
+    return
+  }
+  playerActions.setCurrentTime(elapsed)
+  breakRaf = requestAnimationFrame(tickBreak)
+}
+
+async function handleSegmentEnded() {
+  const outcome = playerActions.handleTrackEnded()
+  if (outcome === 'stop') return
+  await loadAndPlayFromStore()
+}
+
+async function loadAndPlayFromStore() {
+  const st = get(playerState)
+  const item = st.queue[st.queueIndex]
+  if (!item) return
+  stopBreakTicker()
+  if (item.kind === 'break') {
+    audioEngine.stop()
+    audioEngine.setPlaybackEndCap(null)
+    playerActions.play()
+    return
+  }
+  await audioEngine.load(item.track)
+  syncAudioEnginePlaybackCap()
   audioEngine.setTempo(st.tempo)
+  audioEngine.seek(get(playerState).currentTime)
   audioEngine.play()
   playerActions.play()
 }
 
+$: {
+  const playingBreak = $isPlaying && $isPlaybackBreak
+  if (playingBreak && !wasPlayingBreak) {
+    breakWallStart = performance.now()
+    breakElapsedAnchor = get(playerState).currentTime
+    stopBreakTicker()
+    breakRaf = requestAnimationFrame(tickBreak)
+  }
+  if (!playingBreak) stopBreakTicker()
+  wasPlayingBreak = playingBreak
+}
+
 async function togglePlay() {
   if ($isPlaying) {
-    audioEngine.pause()
+    stopBreakTicker()
+    if (!$isPlaybackBreak) {
+      audioEngine.pause()
+    }
     playerActions.pause()
   } else {
+    if ($isPlaybackBreak) {
+      breakWallStart = performance.now()
+      breakElapsedAnchor = $playerState.currentTime
+      playerActions.play()
+      return
+    }
     if ($currentTrack) {
       await audioEngine.load($currentTrack)
       audioEngine.setTempo($playerState.tempo)
+      syncAudioEnginePlaybackCap()
     }
     audioEngine.play()
     playerActions.play()
@@ -122,8 +203,12 @@ async function togglePlay() {
 
 async function previous() {
   if ($playerState.currentTime > 3) {
-    audioEngine.seek(0)
-    playerActions.restartCurrentInPlace()
+    if ($isPlaybackBreak) {
+      playerActions.setCurrentTime(0)
+    } else {
+      audioEngine.seek(0)
+      playerActions.restartCurrentInPlace()
+    }
     return
   }
   if (!playerActions.skipToPreviousQueue()) return
@@ -135,12 +220,9 @@ async function next() {
   await loadAndPlayFromStore()
 }
 
-/** Source-file duration used for scrubbing (decoded buffer length). */
+/** Timeline length for scrubbing (capped when finals segment applies). */
 function durationForSeek(): number {
-  const st = get(playerState)
-  if (st.sourceDuration > 0) return st.sourceDuration
-  const t = get(currentTrack)
-  return t && t.duration > 0 ? t.duration : 0
+  return get(displaySourceDuration)
 }
 
 function seekToClientX(clientX: number, el: HTMLInputElement) {
@@ -151,8 +233,13 @@ function seekToClientX(clientX: number, el: HTMLInputElement) {
   const w = Math.max(1, rect.width)
   const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / w))
   const seconds = ratio * dur
-  audioEngine.seek(seconds)
-  playerActions.setCurrentTime(seconds)
+  if (isQueueBreakItem(get(playerState))) {
+    playerActions.setCurrentTime(seconds)
+    syncBreakTickerAfterUserSeek(seconds)
+  } else {
+    audioEngine.seek(seconds)
+    playerActions.setCurrentTime(seconds)
+  }
 }
 
 /** Range `input` / `change` (value is 0–100). */
@@ -162,8 +249,13 @@ function onSeekFromRange(e: Event) {
   if (!(dur > 0)) return
   const value = parseFloat(el.value)
   const seconds = (value / 100) * dur
-  audioEngine.seek(seconds)
-  playerActions.setCurrentTime(seconds)
+  if (isQueueBreakItem(get(playerState))) {
+    playerActions.setCurrentTime(seconds)
+    syncBreakTickerAfterUserSeek(seconds)
+  } else {
+    audioEngine.seek(seconds)
+    playerActions.setCurrentTime(seconds)
+  }
 }
 
 /** Click / tap on bar: some browsers omit `change` when only clicking the track. */
@@ -191,7 +283,8 @@ let volHoverRatio = 0
 let volHoverShow = false
 let volShellHovered = false
 
-$: seekHoverActive = seekHoverShow && $currentTrack != null && sourceDuration > 0
+$: seekHoverActive =
+  seekHoverShow && ($currentTrack != null || $isPlaybackBreak) && scrubDuration > 0
 $: seekTrackGradient = buildScrubBarGradient(progress, seekHoverRatio, {
   shellHovered: seekShellHovered,
   previewActive: seekHoverActive,
@@ -214,7 +307,7 @@ function onSeekBarPointerMove(e: PointerEvent) {
     return
   }
   seekShellHovered = true
-  if (el.disabled || !get(currentTrack)) {
+  if (el.disabled || (!get(currentTrack) && !get(isPlaybackBreak))) {
     seekHoverShow = false
     return
   }
@@ -334,22 +427,25 @@ onMount(() => {
   }, 30_000)
   window.addEventListener('pointerup', onWindowPointerUp)
   unsubTimeUpdate = audioEngine.on<number>('timeupdate', (time) => {
+    if (isQueueBreakItem(get(playerState))) return
     playerActions.setCurrentTime(time)
   })
   unsubEnded = audioEngine.on('ended', async () => {
-    const outcome = playerActions.handleTrackEnded()
-    if (outcome === 'stop') return
-    await loadAndPlayFromStore()
+    if (isQueueBreakItem(get(playerState))) return
+    await handleSegmentEnded()
   })
   unsubLoaded = audioEngine.on('loaded', () => {
+    if (isQueueBreakItem(get(playerState))) return
     const d = audioEngine.duration
     if (d > 0) {
       playerActions.setSourceDuration(d)
     }
+    syncAudioEnginePlaybackCap()
   })
 })
 
 onDestroy(() => {
+  stopBreakTicker()
   if (voteCooldownInterval != null) clearInterval(voteCooldownInterval)
   window.removeEventListener('pointerup', onWindowPointerUp)
   unsubTimeUpdate?.()
@@ -365,14 +461,25 @@ onDestroy(() => {
       <button
         type="button"
         class="now-playing-bar__art now-playing-bar__art--btn"
-        class:now-playing-bar__art--dim={!$currentTrack}
+        class:now-playing-bar__art--dim={!$currentTrack && !$isPlaybackBreak}
         disabled={!$currentTrack}
         title={$currentTrack ? 'Edit artwork and track details' : undefined}
-        aria-label={$currentTrack ? 'Edit artwork and track details' : 'No track selected'}
+        aria-label={$currentTrack
+          ? 'Edit artwork and track details'
+          : $isPlaybackBreak
+            ? 'Break'
+            : 'No track selected'}
         on:click={openTrackMetadataFromBar}
       >
         {#if $currentTrack?.artworkUrl}
           <img src={$currentTrack.artworkUrl} alt="" />
+        {:else if $isPlaybackBreak}
+          <div class="now-playing-bar__art-ph now-playing-bar__art-ph--break" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+              <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+            </svg>
+          </div>
         {:else}
           <div class="now-playing-bar__art-ph">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -390,7 +497,10 @@ onDestroy(() => {
         {/if}
       </button>
       <div class="now-playing-bar__meta">
-        {#if $currentTrack}
+        {#if $isPlaybackBreak}
+          <div class="now-playing-bar__title truncate">{$currentBreakLabel}</div>
+          <div class="now-playing-bar__artist truncate">Time block</div>
+        {:else if $currentTrack}
           <div class="now-playing-bar__title truncate">{$currentTrack.title}</div>
           <div class="now-playing-bar__artist truncate">{$currentTrack.artist}</div>
         {:else}
@@ -451,7 +561,7 @@ onDestroy(() => {
             type="button"
             class="np-btn np-btn--play"
             on:click={togglePlay}
-            disabled={!$currentTrack}
+            disabled={!canOperateSegment}
             aria-label={$isPlaying ? 'Pause' : 'Play'}
           >
             {#if $isPlaying}
@@ -518,7 +628,7 @@ onDestroy(() => {
           on:pointermove={onSeekBarPointerMove}
           on:pointerleave={onSeekBarPointerLeave}
         >
-          {#if seekHoverShow && $currentTrack && sourceDuration > 0}
+          {#if seekHoverShow && ($currentTrack || $isPlaybackBreak) && scrubDuration > 0}
             <div
               class="now-playing-bar__seek-tooltip"
               style:left="{seekHoverX}px"
@@ -545,7 +655,7 @@ onDestroy(() => {
             on:pointerdown={onSeekPointerDown}
             on:pointerup={onSeekPointerUp}
             aria-label="Seek"
-            disabled={!$currentTrack}
+            disabled={!canOperateSegment || !(scrubDuration > 0)}
           />
         </div>
         <span class="now-playing-bar__time">{formatTime(displayTotal)}</span>

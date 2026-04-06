@@ -1,3 +1,4 @@
+import { PLAYBACK_CAP_END_FADE_SEC } from '@shared/constants'
 import type { Track } from '@shared/types'
 
 type AudioEngineEvent = 'timeupdate' | 'ended' | 'loaded' | 'error' | 'bpmFromFile'
@@ -35,6 +36,10 @@ export class AudioEngine {
   private _tempo = 1.0
   private _volume = 0.8
   private _duration = 0
+  /** Stop playback and emit `ended` at this source-file second (null = play full buffer). */
+  private _playbackEndCap: number | null = null
+  private _playbackEndFadeSec = PLAYBACK_CAP_END_FADE_SEC
+  private _finishingCapEnd = false
 
   private listeners = new Map<AudioEngineEvent, Set<EventCallback<unknown>>>()
   private rafId: number | null = null
@@ -63,6 +68,7 @@ export class AudioEngine {
       return
     }
 
+    this.clearPlaybackEndCap()
     this.stop()
     this.loadedTrackId = null
     this.loadTargetTrackId = track.id
@@ -154,6 +160,67 @@ export class AudioEngine {
     }
   }
 
+  // ─── Capped segment (e.g. finals) + end fade ───────────────────────────────
+
+  /**
+   * Cap playback at `seconds` from the start of the file (source timeline).
+   * Fades gain down over the last `fadeSeconds` before the cap.
+   */
+  setPlaybackEndCap(seconds: number | null, fadeSeconds = PLAYBACK_CAP_END_FADE_SEC): void {
+    if (seconds != null && seconds > 0) {
+      this._playbackEndCap = seconds
+      this._playbackEndFadeSec = Math.max(0.35, fadeSeconds)
+    } else {
+      this._playbackEndCap = null
+      this._playbackEndFadeSec = PLAYBACK_CAP_END_FADE_SEC
+    }
+    this._finishingCapEnd = false
+  }
+
+  clearPlaybackEndCap(): void {
+    this._playbackEndCap = null
+    this._finishingCapEnd = false
+  }
+
+  private gainMultiplierForElapsed(elapsed: number): number {
+    if (this._playbackEndCap == null) return 1
+    const cap = this._playbackEndCap
+    const fade = Math.min(this._playbackEndFadeSec, cap)
+    const fadeStart = Math.max(0, cap - fade)
+    if (elapsed <= fadeStart) return 1
+    if (elapsed >= cap) return 0
+    return 1 - (elapsed - fadeStart) / fade
+  }
+
+  private applyOutputGain(elapsed: number): void {
+    if (!this.gainNode) return
+    const mult = this.gainMultiplierForElapsed(elapsed)
+    this.gainNode.gain.value = this._volume * mult
+  }
+
+  private finishPlaybackAtCap(elapsedForUi: number): void {
+    if (this._finishingCapEnd) return
+    this._finishingCapEnd = true
+    const src = this.sourceNode
+    this.sourceNode = null
+    this._isPlaying = false
+    this._pausedAt = this._playbackEndCap ?? elapsedForUi
+    this.stopTimeUpdates()
+    if (src) {
+      src.onended = null
+      try {
+        src.stop()
+      } catch {
+        /* already stopped */
+      }
+    }
+    if (this.gainNode) {
+      this.gainNode.gain.value = this._volume
+    }
+    this.clearPlaybackEndCap()
+    this.emit('ended', undefined)
+  }
+
   // ─── Playback ──────────────────────────────────────────────────────────────
 
   play(): void {
@@ -174,10 +241,15 @@ export class AudioEngine {
       // Only the *natural* buffer end should emit `ended`. Programmatic
       // `stop()` from pause/seek/stop clears this handler first so we never
       // fire a fake "track ended" (that would desync UI and skip the queue).
+      if (this._finishingCapEnd) return
       if (this._isPlaying) {
         this._isPlaying = false
         this._pausedAt = 0
         this.stopTimeUpdates()
+        this.clearPlaybackEndCap()
+        if (this.gainNode) {
+          this.gainNode.gain.value = this._volume
+        }
         this.emit('ended', undefined)
       }
     }
@@ -186,6 +258,7 @@ export class AudioEngine {
     this._startedAt = this.context.currentTime - this._pausedAt / this._tempo
     this._isPlaying = true
     this.sourceNode = source
+    this.applyOutputGain(this._pausedAt)
     this.startTimeUpdates()
   }
 
@@ -204,6 +277,9 @@ export class AudioEngine {
         /* already stopped */
       }
     }
+    if (this.gainNode) {
+      this.gainNode.gain.value = this._volume
+    }
   }
 
   stop(): void {
@@ -213,6 +289,8 @@ export class AudioEngine {
     this._pausedAt = 0
     this._startedAt = 0
     this.loadTargetTrackId = null
+    this._finishingCapEnd = false
+    this.clearPlaybackEndCap()
     this.stopTimeUpdates()
     if (src) {
       src.onended = null
@@ -227,7 +305,9 @@ export class AudioEngine {
   seek(seconds: number): void {
     const wasPlaying = this._isPlaying
     if (wasPlaying) this.pause()
-    this._pausedAt = Math.max(0, Math.min(seconds, this._duration))
+    const max =
+      this._playbackEndCap != null ? Math.min(this._duration, this._playbackEndCap) : this._duration
+    this._pausedAt = Math.max(0, Math.min(seconds, max))
     if (wasPlaying) this.play()
   }
 
@@ -268,7 +348,11 @@ export class AudioEngine {
   setVolume(volume: number): void {
     this._volume = Math.max(0, Math.min(1, volume))
     const ctx = this.context
-    if (this.gainNode && ctx) {
+    if (!this.gainNode || !ctx) return
+    if (this._isPlaying && this._playbackEndCap != null) {
+      const elapsed = this.currentTime
+      this.applyOutputGain(elapsed)
+    } else {
       this.gainNode.gain.setTargetAtTime(this._volume, ctx.currentTime, 0.01)
     }
   }
@@ -277,11 +361,21 @@ export class AudioEngine {
 
   private startTimeUpdates(): void {
     const tick = () => {
+      this.rafId = null
       if (this._isPlaying && this.context) {
         const elapsed = (this.context.currentTime - this._startedAt) * this._tempo
+        if (this._playbackEndCap != null && elapsed >= this._playbackEndCap) {
+          this.finishPlaybackAtCap(elapsed)
+          return
+        }
         this.emit('timeupdate', elapsed)
+        if (this._playbackEndCap != null) {
+          this.applyOutputGain(elapsed)
+        }
       }
-      this.rafId = requestAnimationFrame(tick)
+      if (this._isPlaying) {
+        this.rafId = requestAnimationFrame(tick)
+      }
     }
     this.rafId = requestAnimationFrame(tick)
   }

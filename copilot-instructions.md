@@ -135,7 +135,7 @@ audioEngine.on('ended', () => { ... })
 - No hardcoded colors or spacing — use CSS tokens
 - No `any` in TypeScript without explanatory comment
 - Spotify features are stubs — mark with `// TODO: see docs/spotify-integration.md`
-- Sidebar **Finals** uses `finals.store` + `FinalsPanel` (main panel). **Rounds**, **New custom mode…**, **Other** rows are stubs — `// TODO: see docs/practice-modes.md`
+- Sidebar **Finals** uses nested persisted sessions (`finals.store` + settings `finalsSessions`) and `FinalsPanel` (main panel); player queue may include **break** items. **Rounds**, **New custom mode…**, **Other** rows are stubs — `// TODO: see docs/practice-modes.md`
 
 ---
 

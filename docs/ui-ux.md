@@ -35,7 +35,7 @@ Chrome is **Spotify-inspired**: outer background `#000`, floating `#121212` pane
 
 - **Order** (top to bottom): All Tracks → **Latin** → **Standard** → **Modes** → **Other** → **Folders** (when library folders exist) → footer actions.
 - **Collapsible sections** — **Latin**, **Standard**, **Modes**, **Other**, and **Folders** share one pattern: uppercase header row with chevron; body toggles with `aria-expanded` / `aria-controls`. **Folders** and **Other** start **collapsed**; the rest start **expanded**.
-- **Modes** — **Finals** opens the finals builder in the **main content** (replaces the track list). **Rounds** and **New custom mode…** are stubs (toast).
+- **Modes** — **Finals** expands to **nested saved runs** (persisted); choosing one opens the finals wizard/playlist in **main content**. **Rounds** and **New custom mode…** are stubs (toast).
 - **Other** (stub) — **Time blocks** and **Miscellaneous** (fanfares, PA / ceremony cues) — same stub behavior. See `docs/practice-modes.md`.
 
 ---

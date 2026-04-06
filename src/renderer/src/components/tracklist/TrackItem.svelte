@@ -2,7 +2,13 @@
 import { createEventDispatcher } from 'svelte'
 import type { Track, DanceId } from '@shared/types'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
-import { currentTrack, isPlaying, playerActions, playerState } from '../../stores/player.store'
+import {
+  currentTrack,
+  isPlaying,
+  playerActions,
+  playerState,
+  syncAudioEnginePlaybackCap,
+} from '../../stores/player.store'
 import { audioEngine } from '../../services/audioEngine'
 import { uiActions } from '../../stores/ui.store'
 import { libraryActions, libraryState, selectedTrackIds } from '../../stores/library.store'
@@ -38,6 +44,7 @@ export let filterFolderPath: string | null = null
 $: isCurrent = $currentTrack?.id === track.id
 /** “Now playing” row treatment only in the list where playback was started */
 $: listContextMatches =
+  $playerState.playbackFinalsSessionId == null &&
   (filterDanceId != null &&
     $playerState.playbackListDanceId === filterDanceId &&
     $playerState.playbackListFolderPath == null) ||
@@ -70,6 +77,7 @@ async function play() {
   // List play always starts from the beginning; load() may noop if already buffered.
   audioEngine.seek(0)
   playerActions.setCurrentTime(0)
+  syncAudioEnginePlaybackCap()
   audioEngine.play()
   playerActions.play()
 }
@@ -84,6 +92,7 @@ async function togglePlay() {
     audioEngine.pause()
     playerActions.pause()
   } else {
+    syncAudioEnginePlaybackCap()
     audioEngine.play()
     playerActions.play()
   }

@@ -94,6 +94,9 @@ export const TEMPO_MAX_PERCENT = 32
 export const TEMPO_STEP_PERCENT = 0.5
 export const TEMPO_FINE_STEP_PERCENT = 0.1
 
+/** Fade out gain over the last N seconds when playback stops at a time cap (e.g. finals segment). */
+export const PLAYBACK_CAP_END_FADE_SEC = 4
+
 // ─── UI ───────────────────────────────────────────────────────────────────────
 
 export const SIDEBAR_WIDTH_PX = 220

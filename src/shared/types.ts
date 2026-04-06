@@ -127,10 +127,18 @@ export interface AddLibraryPathsResult extends LibraryDiskSyncPayload {
 
 export type RepeatMode = 'off' | 'all' | 'one'
 
+/** One entry in the player queue: a library track (optional segment cap) or a timed break. */
+export type PlaybackQueueItem =
+  | { kind: 'track'; track: Track; capSec: number | null }
+  | { kind: 'break'; seconds: number; label?: string }
+
 export interface PlaybackState {
   track: Track | null
   isPlaying: boolean
-  /** Current position in seconds (timeline in the source file, 0 … sourceDuration) */
+  /**
+   * Timeline position: for tracks, seconds in the source file (0 … sourceDuration).
+   * For breaks, wall-clock elapsed seconds (tempo does not apply).
+   */
   currentTime: number
   /** Playback rate: 1.0 = normal speed, 0.9 = -10%, 1.1 = +10% */
   tempo: number
@@ -138,17 +146,20 @@ export interface PlaybackState {
   volume: number
   /** When true, gain is forced to 0; volume stores the pre-mute level for the slider */
   muted: boolean
-  /** Queue of upcoming tracks */
-  queue: Track[]
-  /** Index of current track in queue */
+  /** Ordered playback segments (tracks + breaks). */
+  queue: PlaybackQueueItem[]
+  /** Index of the current segment in `queue` */
   queueIndex: number
-  /** Source file duration in seconds (from metadata / decoded buffer) */
+  /**
+   * For tracks: decoded / metadata file length in seconds.
+   * For breaks: break length in seconds (wall clock).
+   */
   sourceDuration: number
   /**
    * When true, follow `queue` order; order is built when shuffle is turned on (random with mild popularity bias).
    */
   shuffle: boolean
-  /** Loop: off, whole queue, or current track (track applies at end of song) */
+  /** Loop: off, whole queue, or current track (applies to track segments only) */
   repeatMode: RepeatMode
   /**
    * Sidebar dance filter when the queue was started from the track list.
@@ -161,6 +172,10 @@ export interface PlaybackState {
    * `null` = All Tracks or a dance filter. Mutually exclusive with `playbackListDanceId`.
    */
   playbackListFolderPath: string | null
+  /**
+   * When set, queue was started from this saved finals session (sidebar + list highlighting).
+   */
+  playbackFinalsSessionId: string | null
 }
 
 export interface TempoState {
@@ -195,27 +210,50 @@ export interface FinalRoundConfig {
   discipline: DanceStyle
   /** Subset of the five dances for `discipline`, competition order preserved. */
   danceIds: DanceId[]
-  /** Minimum track duration required (seconds); playlist only picks tracks at least this long. */
+  /** Target segment length per dance (seconds): library picks tracks at least this long; playback shows/plays only this much. */
   danceDurationSec: number
   breakDurationSec: number
 }
 
-/** Sidebar → Finals flow: null = normal library list. */
+/** Sidebar → Finals flow: null = panel closed (library list). */
 export type FinalsFlow = null | 'count' | 'configure' | 'list'
 
-/** Built finals run: songs + pauses between dances within each final. */
+/** One saved finals run (persisted in app settings). */
+export interface FinalsPersistedSession {
+  id: string
+  /** e.g. Final 1 */
+  label: string
+  finalsCount: number
+  /** Time block after each final except the last (seconds). */
+  gapBetweenFinalsSec: number
+  configureIndex: number
+  rounds: FinalRoundConfig[]
+  playlist: FinalsPlaylistRow[]
+  panelFlow: 'count' | 'configure' | 'list'
+}
+
+/** Persisted JSON may omit `gapBetweenFinalsSec` (older saves); hydrate normalizes to {@link FinalsPersistedSession}. */
+export type FinalsPersistedSessionSnapshot = Omit<FinalsPersistedSession, 'gapBetweenFinalsSec'> & {
+  gapBetweenFinalsSec?: number
+}
+
+/** Built finals run: songs + pauses between dances within each final, and pauses between finals. */
 export type FinalsPlaylistRow =
   | {
       kind: 'track'
       trackId: string | null
       danceId: DanceId
       finalIndex: number
+      /** Seconds to display and play from the start (≤ file length). */
+      playDurationSec: number
       emptyReason?: string
     }
   | {
       kind: 'pause'
       seconds: number
       finalIndex: number
+      /** Now-playing label; omit for default “Break”. */
+      label?: string
     }
 
 // ─── Spotify ──────────────────────────────────────────────────────────────────
@@ -262,4 +300,6 @@ export interface AppSettings {
   latinDanceOrder?: DanceId[]
   /** Sidebar order within Standard (subset of Standard `DanceId`s, persisted). */
   standardDanceOrder?: DanceId[]
+  /** Saved finals runs; removed only via sidebar delete. */
+  finalsSessions?: FinalsPersistedSessionSnapshot[]
 }

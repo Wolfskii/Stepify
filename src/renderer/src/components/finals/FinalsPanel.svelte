@@ -1,14 +1,54 @@
 <script lang="ts">
-import { onDestroy, onMount } from 'svelte'
+import { onDestroy, onMount, tick } from 'svelte'
 import { get } from 'svelte/store'
-import { DANCE_CATEGORIES, DANCE_CATEGORIES_BY_ID } from '@shared/constants'
-import { finalsActions, finalsState } from '../../stores/finals.store'
+import { resolveTrackReferenceBpm } from '@shared/track-bpm'
+import { DANCE_CATEGORIES } from '@shared/constants'
+import type { Track } from '@shared/types'
+import { audioEngine } from '../../services/audioEngine'
+import { activeFinalsSession, finalsActions, finalsFlow } from '../../stores/finals.store'
 import { libraryState } from '../../stores/library.store'
-import { formatDurationClock, parseMinSecParts } from '../../utils/finalsPlaylist'
+import { isPlaying, isQueueBreakItem, playerActions, playerState } from '../../stores/player.store'
+import {
+  formatDurationClock,
+  parseMinSecParts,
+  playlistRowIndexForQueueIndex,
+} from '../../utils/finalsPlaylist'
 
-$: f = $finalsState
+$: sess = $activeFinalsSession
+$: flow = $finalsFlow
+/** Playlist row index matching current player queue (reactive). */
+$: currentPlaylistRowIndex = (() => {
+  const s = sess
+  const ps = $playerState
+  if (!s || ps.playbackFinalsSessionId !== s.id) return null
+  return playlistRowIndexForQueueIndex(s.playlist, $libraryState.tracks, ps.queueIndex)
+})()
+
+/** Drop stale :focus-visible on badge buttons after the queue advances (row outline follows `queueIndex`). */
+function blurStaleFinalsPlaylistFocus() {
+  const ae = document.activeElement
+  if (!(ae instanceof HTMLElement)) return
+  if (!ae.classList.contains('finals-badge-hit')) return
+  const row = ae.closest('.finals-table--row')
+  if (!(row instanceof HTMLElement)) return
+  if (!row.classList.contains('finals-table--playing')) ae.blur()
+}
+
+let prevFinalsQueueIndex = -1
+$: {
+  const fid = $playerState.playbackFinalsSessionId
+  const qi = $playerState.queueIndex
+  if (fid == null) {
+    prevFinalsQueueIndex = -1
+  } else if (qi !== prevFinalsQueueIndex) {
+    prevFinalsQueueIndex = qi
+    void tick().then(blurStaleFinalsPlaylistFocus)
+  }
+}
 $: round =
-  f.flow === 'configure' && f.rounds[f.configureIndex] != null ? f.rounds[f.configureIndex] : null
+  flow === 'configure' && sess && sess.rounds[sess.configureIndex] != null
+    ? sess.rounds[sess.configureIndex]
+    : null
 $: disciplineDances =
   round != null ? DANCE_CATEGORIES.filter((d) => d.style === round.discipline) : []
 
@@ -23,21 +63,22 @@ onMount(() => window.addEventListener('keydown', onWinKey))
 onDestroy(() => window.removeEventListener('keydown', onWinKey))
 
 function setDanceDurationFromInputs(minStr: string, secStr: string) {
-  const st = get(finalsState)
-  const r = st.rounds[st.configureIndex]
+  const s = get(activeFinalsSession)
+  if (!s) return
+  const r = s.rounds[s.configureIndex]
   if (!r) return
   const m = Number.parseInt(minStr, 10)
-  const s = Number.parseInt(secStr, 10)
-  finalsActions.updateRound(st.configureIndex, {
-    danceDurationSec: parseMinSecParts(Number.isFinite(m) ? m : 0, Number.isFinite(s) ? s : 0),
+  const sec = Number.parseInt(secStr, 10)
+  finalsActions.updateRound(s.configureIndex, {
+    danceDurationSec: parseMinSecParts(Number.isFinite(m) ? m : 0, Number.isFinite(sec) ? sec : 0),
   })
 }
 
 function setBreakSeconds(v: string) {
-  const st = get(finalsState)
-  if (!st.rounds[st.configureIndex]) return
+  const s = get(activeFinalsSession)
+  if (!s?.rounds[s.configureIndex]) return
   const n = Number.parseInt(v, 10)
-  finalsActions.updateRound(st.configureIndex, {
+  finalsActions.updateRound(s.configureIndex, {
     breakDurationSec: Number.isFinite(n) ? Math.max(0, Math.min(600, n)) : 0,
   })
 }
@@ -48,45 +89,97 @@ function inputValue(e: Event): string {
 }
 
 function onFinalsCountInput(e: Event) {
-  finalsActions.setFinalsCount(Number(inputValue(e)))
+  finalsActions.setFinalsCountForActive(Number(inputValue(e)))
 }
 
 function onDanceMinInput(e: Event) {
-  const st = get(finalsState)
-  const sec = st.rounds[st.configureIndex]?.danceDurationSec ?? 0
+  const s = get(activeFinalsSession)
+  const sec = s?.rounds[s.configureIndex]?.danceDurationSec ?? 0
   setDanceDurationFromInputs(inputValue(e), String(sec % 60))
 }
 
 function onDanceSecInput(e: Event) {
-  const st = get(finalsState)
-  const dur = st.rounds[st.configureIndex]?.danceDurationSec ?? 0
+  const s = get(activeFinalsSession)
+  const dur = s?.rounds[s.configureIndex]?.danceDurationSec ?? 0
   setDanceDurationFromInputs(String(Math.floor(dur / 60)), inputValue(e))
 }
 
 function onBreakDurationInput(e: Event) {
   setBreakSeconds(inputValue(e))
 }
+
+function onGapBetweenFinalsInput(e: Event) {
+  const n = Number.parseInt(inputValue(e), 10)
+  finalsActions.setGapBetweenFinalsForActive(Number.isFinite(n) ? n : 0)
+}
+
+function bpmCell(tr: Track | undefined): string {
+  if (!tr) return '—'
+  const r = resolveTrackReferenceBpm(tr)
+  return r ? String(r.bpm) : '—'
+}
+
+function listRowIsCurrent(playlistIndex: number): boolean {
+  return currentPlaylistRowIndex === playlistIndex
+}
+
+async function onBadgePointerDown(playlistIndex: number, e: PointerEvent) {
+  e.stopPropagation()
+  e.preventDefault()
+  const s = get(activeFinalsSession)
+  if (!s) return
+  const same = currentPlaylistRowIndex === playlistIndex
+  const playing = get(isPlaying)
+  if (same && playing) {
+    const p = get(playerState)
+    if (isQueueBreakItem(p)) playerActions.pause()
+    else {
+      audioEngine.pause()
+      playerActions.pause()
+    }
+    return
+  }
+  if (same && !playing) {
+    const p = get(playerState)
+    if (isQueueBreakItem(p)) playerActions.play()
+    else {
+      audioEngine.play()
+      playerActions.play()
+    }
+    return
+  }
+  await finalsActions.playFromPlaylistRow(playlistIndex)
+}
+
+function onListRowDblClick(playlistIndex: number) {
+  void finalsActions.playFromPlaylistRow(playlistIndex)
+}
 </script>
 
+{#if !sess}
+  <div class="finals-panel finals-panel--empty">
+    <p class="finals-panel__empty-msg">Select a final in the sidebar.</p>
+  </div>
+{:else}
 <div class="finals-panel">
   <header class="finals-panel__head">
     <div class="finals-panel__head-text">
       <h1 class="finals-panel__title">
-        {#if f.flow === 'count'}
-          Finals setup
-        {:else if f.flow === 'configure'}
-          Final {f.configureIndex + 1} of {f.rounds.length}
+        {#if flow === 'count'}
+          Finals setup — {sess.label}
+        {:else if flow === 'configure'}
+          {sess.label}: round {sess.configureIndex + 1} of {sess.rounds.length}
         {:else}
-          Finals playlist
+          {sess.label} — playlist
         {/if}
       </h1>
       <p class="finals-panel__sub">
-        {#if f.flow === 'count'}
-          How many finals to simulate? You’ll set discipline, dances, timings, and breaks for each.
-        {:else if f.flow === 'configure'}
-          Choose Standard or Latin, which dances, minimum song length, and pause between dances.
+        {#if flow === 'count'}
+          How many finals to simulate? You’ll set discipline, dances, timings, breaks between dances, and time between finals.
+        {:else if flow === 'configure'}
+          Choose Standard or Latin, which dances, song length per dance, pause between dances, and time between finals.
         {:else}
-          Random picks meet your minimum length per dance. Pauses are time blocks between dances.
+          Random picks are at least as long as your per-dance length; playback uses that length. Pauses are time blocks between dances and between finals.
         {/if}
       </p>
     </div>
@@ -99,7 +192,7 @@ function onBreakDurationInput(e: Event) {
     </button>
   </header>
 
-  {#if f.flow === 'count'}
+  {#if flow === 'count'}
     <div class="finals-panel__body">
       <label class="finals-field">
         <span class="finals-field__label">Number of finals</span>
@@ -108,8 +201,19 @@ function onBreakDurationInput(e: Event) {
           type="number"
           min="1"
           max="20"
-          value={f.finalsCount}
+          value={sess.finalsCount}
           on:input={onFinalsCountInput}
+        />
+      </label>
+      <label class="finals-field">
+        <span class="finals-field__label">Time between finals (seconds)</span>
+        <input
+          class="finals-input finals-input--sm"
+          type="number"
+          min="0"
+          max="600"
+          value={sess.gapBetweenFinalsSec}
+          on:input={onGapBetweenFinalsInput}
         />
       </label>
       <div class="finals-panel__actions">
@@ -121,14 +225,25 @@ function onBreakDurationInput(e: Event) {
         </button>
       </div>
     </div>
-  {:else if f.flow === 'configure' && round != null}
+  {:else if flow === 'configure' && round != null}
     <div class="finals-panel__body">
+      <label class="finals-field finals-field--run-wide">
+        <span class="finals-field__label">Time between finals (seconds)</span>
+        <input
+          class="finals-input finals-input--sm"
+          type="number"
+          min="0"
+          max="600"
+          value={sess.gapBetweenFinalsSec}
+          on:input={onGapBetweenFinalsInput}
+        />
+      </label>
       <nav class="finals-jump" aria-label="Jump to final">
-        {#each f.rounds as _, i}
+        {#each sess.rounds as _, i}
           <button
             type="button"
             class="finals-jump__btn"
-            class:finals-jump__btn--active={i === f.configureIndex}
+            class:finals-jump__btn--active={i === sess.configureIndex}
             on:click={() => finalsActions.goConfigureRound(i)}
           >
             {i + 1}
@@ -143,7 +258,7 @@ function onBreakDurationInput(e: Event) {
             type="button"
             class="finals-chip"
             class:finals-chip--on={round.discipline === 'standard'}
-            on:click={() => finalsActions.setRoundDiscipline(f.configureIndex, 'standard')}
+            on:click={() => finalsActions.setRoundDiscipline(sess.configureIndex, 'standard')}
           >
             Standard
           </button>
@@ -151,7 +266,7 @@ function onBreakDurationInput(e: Event) {
             type="button"
             class="finals-chip"
             class:finals-chip--on={round.discipline === 'latin'}
-            on:click={() => finalsActions.setRoundDiscipline(f.configureIndex, 'latin')}
+            on:click={() => finalsActions.setRoundDiscipline(sess.configureIndex, 'latin')}
           >
             Latin
           </button>
@@ -166,7 +281,7 @@ function onBreakDurationInput(e: Event) {
               <input
                 type="checkbox"
                 checked={round.danceIds.includes(d.id)}
-                on:change={() => finalsActions.toggleRoundDance(f.configureIndex, d.id)}
+                on:change={() => finalsActions.toggleRoundDance(sess.configureIndex, d.id)}
               />
               <span>{d.name}</span>
             </label>
@@ -174,10 +289,10 @@ function onBreakDurationInput(e: Event) {
         </div>
       </fieldset>
 
-      {#key f.configureIndex}
+      {#key sess.configureIndex}
         <div class="finals-times">
           <label class="finals-field">
-            <span class="finals-field__label">Minimum song length (per dance)</span>
+            <span class="finals-field__label">Song length per dance</span>
             <div class="finals-times__row">
               <input
                 class="finals-input finals-input--sm"
@@ -220,14 +335,14 @@ function onBreakDurationInput(e: Event) {
         <button
           type="button"
           class="finals-btn finals-btn--ghost"
-          on:click={() => finalsActions.applyTimesToAllFinals(f.configureIndex)}
+          on:click={() => finalsActions.applyTimesToAllFinals(sess.configureIndex)}
         >
           Apply lengths &amp; breaks to all finals
         </button>
         <button
           type="button"
           class="finals-btn finals-btn--ghost"
-          on:click={() => finalsActions.applyFullToAllFinals(f.configureIndex)}
+          on:click={() => finalsActions.applyFullToAllFinals(sess.configureIndex)}
         >
           Apply full setup to all finals
         </button>
@@ -242,11 +357,11 @@ function onBreakDurationInput(e: Event) {
           class="finals-btn finals-btn--primary"
           on:click={() => finalsActions.configureNextOrFinish()}
         >
-          {f.configureIndex >= f.rounds.length - 1 ? 'Build playlist' : 'Next final'}
+          {sess.configureIndex >= sess.rounds.length - 1 ? 'Build playlist' : 'Next final'}
         </button>
       </div>
     </div>
-  {:else if f.flow === 'list'}
+  {:else if flow === 'list'}
     <div class="finals-panel__body finals-panel__body--list">
       <div class="finals-list-toolbar">
         <button
@@ -260,41 +375,112 @@ function onBreakDurationInput(e: Event) {
           Edit setup
         </button>
       </div>
-      <ul class="finals-list" role="list">
-        {#each f.playlist as row}
+      <div class="finals-table-wrap" role="grid" aria-label="Finals playlist">
+        <div class="finals-table finals-table--head" role="row">
+          <div class="finals-table__cell finals-table__cell--badge" role="columnheader"></div>
+          <div class="finals-table__cell" role="columnheader">Title</div>
+          <div class="finals-table__cell" role="columnheader">Artist</div>
+          <div class="finals-table__cell finals-table__cell--num" role="columnheader">BPM</div>
+          <div class="finals-table__cell finals-table__cell--num" role="columnheader">Length</div>
+        </div>
+        {#each sess.playlist as row, playlistIndex}
           {#if row.kind === 'track'}
             {@const tr = row.trackId
               ? $libraryState.tracks.find((t) => t.id === row.trackId)
               : undefined}
-            <li class="finals-list__row finals-list__row--track">
-              <span class="finals-list__badge" title="Final index">F{row.finalIndex + 1}</span>
-              <span
-                class="finals-list__dance"
-                style="--dance-color: {DANCE_CATEGORIES_BY_ID[row.danceId]?.color ?? 'var(--color-text-muted)'}"
-              >
-                {DANCE_CATEGORIES_BY_ID[row.danceId]?.name ?? row.danceId}
-              </span>
+            <div
+              role="row"
+              class="finals-table finals-table--row finals-table--track"
+              class:finals-table--playing={listRowIsCurrent(playlistIndex)}
+              on:dblclick={() => onListRowDblClick(playlistIndex)}
+            >
+              <div class="finals-table__cell finals-table__cell--badge" role="gridcell">
+                <button
+                  type="button"
+                  class="finals-badge-hit"
+                  title={listRowIsCurrent(playlistIndex) && $isPlaying ? 'Pause' : 'Play from here'}
+                  aria-label={listRowIsCurrent(playlistIndex) && $isPlaying ? 'Pause' : 'Play from here'}
+                  on:pointerdown={(e) => onBadgePointerDown(playlistIndex, e)}
+                >
+                  <span class="finals-badge-hit__f">F{row.finalIndex + 1}</span>
+                  <span class="finals-badge-hit__ico" aria-hidden="true">
+                    {#if listRowIsCurrent(playlistIndex) && $isPlaying}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+                      </svg>
+                    {:else}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7L8 5z" />
+                      </svg>
+                    {/if}
+                  </span>
+                </button>
+              </div>
               {#if tr}
-                <span class="finals-list__title truncate">{tr.title}</span>
-                <span class="finals-list__meta">{formatDurationClock(tr.duration)}</span>
+                <div class="finals-table__cell truncate" role="gridcell" title={tr.title}>
+                  {tr.title}
+                </div>
+                <div class="finals-table__cell truncate finals-table__cell--muted" role="gridcell">
+                  {tr.artist || '—'}
+                </div>
+                <div class="finals-table__cell finals-table__cell--num" role="gridcell">
+                  {bpmCell(tr)}
+                </div>
+                <div class="finals-table__cell finals-table__cell--num" role="gridcell">
+                  {formatDurationClock(row.playDurationSec)}
+                </div>
               {:else}
-                <span class="finals-list__empty truncate">
+                <div
+                  class="finals-table__cell finals-table__cell--empty truncate finals-table__cell--span-rest"
+                  role="gridcell"
+                >
                   {row.emptyReason ?? 'No matching track'}
-                </span>
+                </div>
               {/if}
-            </li>
+            </div>
           {:else}
-            <li class="finals-list__row finals-list__row--pause">
-              <span class="finals-list__badge" title="Final index">F{row.finalIndex + 1}</span>
-              <span class="finals-list__pause-label">Break</span>
-              <span class="finals-list__meta">{formatDurationClock(row.seconds)}</span>
-            </li>
+            <div
+              role="row"
+              class="finals-table finals-table--row finals-table--pause"
+              class:finals-table--playing={listRowIsCurrent(playlistIndex)}
+              on:dblclick={() => onListRowDblClick(playlistIndex)}
+            >
+              <div class="finals-table__cell finals-table__cell--badge" role="gridcell">
+                <button
+                  type="button"
+                  class="finals-badge-hit"
+                  title={listRowIsCurrent(playlistIndex) && $isPlaying ? 'Pause' : 'Play from here'}
+                  aria-label={listRowIsCurrent(playlistIndex) && $isPlaying ? 'Pause' : 'Play from here'}
+                  on:pointerdown={(e) => onBadgePointerDown(playlistIndex, e)}
+                >
+                  <span class="finals-badge-hit__f">F{row.finalIndex + 1}</span>
+                  <span class="finals-badge-hit__ico" aria-hidden="true">
+                    {#if listRowIsCurrent(playlistIndex) && $isPlaying}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+                      </svg>
+                    {:else}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7L8 5z" />
+                      </svg>
+                    {/if}
+                  </span>
+                </button>
+              </div>
+              <div class="finals-table__cell" role="gridcell">{row.label ?? 'Break'}</div>
+              <div class="finals-table__cell finals-table__cell--muted" role="gridcell">—</div>
+              <div class="finals-table__cell finals-table__cell--num" role="gridcell">—</div>
+              <div class="finals-table__cell finals-table__cell--num" role="gridcell">
+                {formatDurationClock(row.seconds)}
+              </div>
+            </div>
           {/if}
         {/each}
-      </ul>
+      </div>
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
   .finals-panel {
@@ -304,6 +490,17 @@ function onBreakDurationInput(e: Event) {
     min-height: 0;
     padding: var(--space-4);
     overflow: hidden;
+  }
+
+  .finals-panel--empty {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .finals-panel__empty-msg {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 14px;
   }
 
   .finals-panel__head {
@@ -372,6 +569,10 @@ function onBreakDurationInput(e: Event) {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-text-muted);
+  }
+
+  .finals-field--run-wide {
+    margin-bottom: var(--space-1);
   }
 
   .finals-input {
@@ -533,66 +734,127 @@ function onBreakDurationInput(e: Event) {
     flex-shrink: 0;
   }
 
-  .finals-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .finals-table-wrap {
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    min-height: 0;
+    padding-right: var(--space-1);
   }
 
-  .finals-list__row {
+  .finals-table {
     display: grid;
-    grid-template-columns: 36px minmax(100px, 140px) 1fr auto;
+    grid-template-columns: 52px minmax(120px, 1.4fr) minmax(100px, 1fr) 52px 56px;
     align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--color-bg-overlay);
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
     font-size: 13px;
+    border-radius: var(--radius-md);
   }
 
-  .finals-list__row--pause {
-    grid-template-columns: 36px 1fr auto;
-    border-style: dashed;
-    border-width: 1px;
-    border-color: var(--color-border);
+  .finals-table--head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-bg-surface);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .finals-table--row {
+    background: var(--color-bg-overlay);
+  }
+
+  .finals-table--row:hover {
+    background: var(--color-bg-elevated);
+  }
+
+  .finals-table--playing {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+
+  .finals-table--pause {
+    border: 1px dashed var(--color-border);
     background: transparent;
   }
 
-  .finals-list__badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: var(--color-text-muted);
+  .finals-table__cell--num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    justify-self: end;
   }
 
-  .finals-list__dance {
-    font-weight: 600;
-    color: var(--dance-color, var(--color-text-secondary));
+  .finals-table__cell--muted {
+    color: var(--color-text-secondary);
   }
 
-  .finals-list__title {
-    color: var(--color-text-primary);
-    font-weight: 500;
-  }
-
-  .finals-list__empty {
+  .finals-table__cell--empty {
     color: var(--color-warning);
     font-style: italic;
   }
 
-  .finals-list__pause-label {
-    font-weight: 600;
-    color: var(--color-text-secondary);
+  .finals-table__cell--span-rest {
+    grid-column: 2 / -1;
   }
 
-  .finals-list__meta {
-    font-variant-numeric: tabular-nums;
+  .finals-badge-hit {
+    position: relative;
+    width: 44px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-base);
     color: var(--color-text-muted);
-    font-size: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background var(--duration-fast),
+      color var(--duration-fast);
+  }
+
+  .finals-badge-hit:hover {
+    background: var(--color-accent-muted);
+    color: var(--color-accent);
+  }
+
+  .finals-badge-hit__ico {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+    background: var(--color-accent-muted);
+    color: var(--color-accent);
+    border-radius: var(--radius-md);
+  }
+
+  .finals-badge-hit:hover .finals-badge-hit__f {
+    opacity: 0;
+  }
+
+  .finals-badge-hit:hover .finals-badge-hit__ico {
+    opacity: 1;
+  }
+
+  .finals-badge-hit__f {
+    transition: opacity var(--duration-fast);
   }
 
   .truncate {

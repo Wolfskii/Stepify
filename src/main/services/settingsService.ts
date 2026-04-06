@@ -26,6 +26,7 @@ export const settingsService = {
       spotifyClientSecret: store.get('spotifyClientSecret'),
       latinDanceOrder: store.get('latinDanceOrder'),
       standardDanceOrder: store.get('standardDanceOrder'),
+      finalsSessions: store.get('finalsSessions'),
     }
   },
 

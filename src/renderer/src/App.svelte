@@ -1,11 +1,13 @@
 <script lang="ts">
 import { onMount } from 'svelte'
+import { get } from 'svelte/store'
 import AppShell from './components/layout/AppShell.svelte'
 import TitleBar from './components/layout/TitleBar.svelte'
 import { libraryActions } from './stores/library.store'
 import { initDanceOrdersFromSettings } from './stores/danceOrder.store'
+import { finalsActions } from './stores/finals.store'
 import { spotifyService } from './services/spotifyService'
-import { playerActions } from './stores/player.store'
+import { playerActions, playerState, isPlaybackBreak } from './stores/player.store'
 import { audioEngine } from './services/audioEngine'
 import type { BpmFromFilePayload } from './services/audioEngine'
 
@@ -24,6 +26,7 @@ onMount(async () => {
   const settingsResult = await window.electronAPI.settings.get()
   if (settingsResult.success && settingsResult.data) {
     initDanceOrdersFromSettings(settingsResult.data)
+    finalsActions.hydrateFromSettings(settingsResult.data.finalsSessions)
   }
 
   window.electronAPI.library.onScanProgress((progress) => {
@@ -73,6 +76,12 @@ function handleGlobalKey(e: KeyboardEvent) {
 
   if (e.code === 'Space') {
     e.preventDefault()
+    const st = get(playerState)
+    if (get(isPlaybackBreak)) {
+      if (st.isPlaying) playerActions.pause()
+      else playerActions.play()
+      return
+    }
     const playing = audioEngine.isPlaying
     if (playing) {
       audioEngine.pause()

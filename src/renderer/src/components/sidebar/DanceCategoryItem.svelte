@@ -15,6 +15,7 @@ let reorderHover = false
 $: isSelected = $selectedDanceId === dance.id
 $: reorderMime = reorderMimeForStyle(dance.style)
 $: isPlaybackSource =
+  $playerState.playbackFinalsSessionId == null &&
   $playerState.track != null &&
   $playerState.playbackListDanceId === dance.id &&
   $playerState.playbackListFolderPath == null

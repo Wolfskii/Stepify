@@ -212,16 +212,19 @@ function playbackListContextMatchesSidebar(l: LibraryState, p: PlaybackState): b
 }
 
 function visibleFilterSetMatchesQueue(l: LibraryState, p: PlaybackState): boolean {
-  if (p.queue.length === 0) return false
+  const qIds = p.queue
+    .filter((i): i is { kind: 'track'; track: Track } => i.kind === 'track')
+    .map((i) => i.track.id)
+  if (qIds.length === 0) return false
   const visible = filterTracksForListView(l.tracks, {
     folderPath: l.selectedFolderPath,
     danceId: l.selectedDanceId,
     searchQuery: l.searchQuery,
   })
-  if (visible.length !== p.queue.length) return false
+  if (visible.length !== qIds.length) return false
   const vs = new Set(visible.map((t) => t.id))
-  for (const t of p.queue) {
-    if (!vs.has(t.id)) return false
+  for (const id of qIds) {
+    if (!vs.has(id)) return false
   }
   return true
 }
@@ -805,6 +808,11 @@ export const libraryActions = {
     const { playerActions, playerState } = await import('./player.store')
     const p = get(playerState)
     const l = get(libraryState)
+
+    if (p.playbackFinalsSessionId != null) {
+      uiActions.notify('Shuffle applies to library lists only', 'info')
+      return
+    }
 
     const visible = filterTracksForListView(l.tracks, {
       folderPath: p.playbackListFolderPath,

@@ -14,7 +14,7 @@ import {
   selectedFolderPath,
 } from '../../stores/library.store'
 import { uiActions } from '../../stores/ui.store'
-import { finalsActions } from '../../stores/finals.store'
+import { finalsActions, finalsState } from '../../stores/finals.store'
 import { currentTrack, playerActions, playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { audioEngine } from '../../services/audioEngine'
@@ -32,6 +32,7 @@ function practiceModesStub(label: string) {
 $: latinDances = $latinOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
 $: standardDances = $standardOrder.map((id) => DANCE_CATEGORIES_BY_ID[id])
 $: allTracksIsPlaybackSource =
+  $playerState.playbackFinalsSessionId == null &&
   $playerState.track != null &&
   $playerState.playbackListDanceId === null &&
   $playerState.playbackListFolderPath == null
@@ -118,35 +119,144 @@ function showAllTracks() {
 
   <!-- Practice modes (competition-style templates — stub) -->
   <SidebarCollapsibleGroup title="Modes" sectionId="sidebar-section-modes" defaultOpen={true}>
-    <button
-      type="button"
-      class="sidebar__aux-row sidebar__aux-row--finals"
-      title="Build a finals run: discipline, dances, timings, random songs"
-      aria-label="Finals mode"
-      on:click={() => finalsActions.openFromSidebar()}
-    >
-      <span class="sidebar__aux-row__icon" aria-hidden="true">
-        <svg
-          class="sidebar__aux-svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+    <div class="sidebar__finals-tree">
+      <div class="sidebar__finals-row sidebar__finals-row--finals">
+        {#if $finalsState.sessions.length > 0}
+          <button
+            type="button"
+            class="sidebar__finals-toggle"
+            title="Finals — expand or collapse saved runs"
+            aria-expanded={$finalsState.finalsNavExpanded}
+            aria-label="Finals — expand or collapse"
+            on:click={() => finalsActions.toggleFinalsNavExpanded()}
+          >
+            <span class="sidebar__finals-chevron" aria-hidden="true">
+              {#if $finalsState.finalsNavExpanded}
+                <svg class="sidebar__aux-svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 10l5 5 5-5H7z" />
+                </svg>
+              {:else}
+                <svg class="sidebar__aux-svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 7l5 5-5 5V7z" />
+                </svg>
+              {/if}
+            </span>
+            <span class="sidebar__aux-row__icon" aria-hidden="true">
+              <svg
+                class="sidebar__aux-svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+            </span>
+            <span class="sidebar__aux-row__label">Finals</span>
+            {#if $playerState.playbackFinalsSessionId != null}
+              <SidebarPlaybackIndicator />
+            {/if}
+          </button>
+        {:else}
+          <div class="sidebar__finals-toggle sidebar__finals-toggle--static">
+            <span class="sidebar__finals-chevron-spacer" aria-hidden="true"></span>
+            <span class="sidebar__aux-row__icon" aria-hidden="true">
+              <svg
+                class="sidebar__aux-svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                <path d="M4 22h16" />
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+              </svg>
+            </span>
+            <span class="sidebar__aux-row__label">Finals</span>
+          </div>
+        {/if}
+        <button
+          type="button"
+          class="sidebar__finals-plus"
+          title="New final"
+          aria-label="New final"
+          on:click|stopPropagation={() => finalsActions.createSession()}
         >
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-          <path d="M4 22h16" />
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-        </svg>
-      </span>
-      <span class="sidebar__aux-row__label">Finals</span>
-    </button>
+          <svg
+            class="sidebar__aux-svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
+      {#if $finalsState.finalsNavExpanded && $finalsState.sessions.length > 0}
+        <ul class="sidebar__finals-nested" role="list">
+          {#each $finalsState.sessions as sess (sess.id)}
+            <li class="sidebar__finals-nested__item">
+              <button
+                type="button"
+                class="sidebar__finals-nested__row"
+                class:sidebar__finals-nested__row--active={$finalsState.activeSessionId === sess.id}
+                class:sidebar__finals-nested__row--queue-source={$playerState.playbackFinalsSessionId ===
+                  sess.id}
+                title="Open {sess.label}"
+                on:click={() => finalsActions.openSession(sess.id)}
+              >
+                <span class="sidebar__finals-nested__label truncate">{sess.label}</span>
+                {#if $playerState.playbackFinalsSessionId === sess.id}
+                  <SidebarPlaybackIndicator />
+                {/if}
+              </button>
+              <button
+                type="button"
+                class="sidebar__finals-remove"
+                title="Remove {sess.label}"
+                aria-label="Remove {sess.label}"
+                on:click|stopPropagation={() => {
+                  if (!confirm(`Remove “${sess.label}” from your saved finals?`)) return
+                  finalsActions.removeSession(sess.id)
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 4l8 8M12 4l-8 8"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
     <button
       type="button"
       class="sidebar__aux-row sidebar__aux-row--rounds"
@@ -265,7 +375,8 @@ function showAllTracks() {
             class="sidebar__folder-item"
             class:sidebar__folder-item--active={$selectedFolderPath != null &&
               pathsMatchSidebar($selectedFolderPath, dir.path)}
-            class:sidebar__folder-item--queue-source={$playerState.track != null &&
+            class:sidebar__folder-item--queue-source={$playerState.playbackFinalsSessionId == null &&
+              $playerState.track != null &&
               $playerState.playbackListFolderPath != null &&
               pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
             title={dir.path}
@@ -283,7 +394,8 @@ function showAllTracks() {
               </svg>
             </span>
             <span class="sidebar__folder-item__label truncate">{folderLabel(dir.path)}</span>
-            {#if $playerState.track != null &&
+            {#if $playerState.playbackFinalsSessionId == null &&
+              $playerState.track != null &&
               $playerState.playbackListFolderPath != null &&
               pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
               <SidebarPlaybackIndicator />
@@ -478,8 +590,179 @@ function showAllTracks() {
     flex-shrink: 0;
   }
 
-  .sidebar__aux-row--finals .sidebar__aux-row__icon {
+  .sidebar__finals-tree {
+    margin-bottom: var(--space-1);
+  }
+
+  .sidebar__finals-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-1);
+    border-radius: var(--radius-md);
+  }
+
+  .sidebar__finals-row--finals .sidebar__aux-row__icon {
     color: var(--color-warning);
+  }
+
+  .sidebar__finals-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .sidebar__finals-toggle:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+  }
+
+  .sidebar__finals-toggle:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sidebar__finals-toggle--static {
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .sidebar__finals-toggle--static:hover {
+    background: none;
+    color: var(--color-text-secondary);
+  }
+
+  .sidebar__finals-chevron-spacer {
+    flex-shrink: 0;
+    width: 14px;
+    height: 1px;
+  }
+
+  .sidebar__finals-plus {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .sidebar__finals-plus:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-accent);
+  }
+
+  .sidebar__finals-plus:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .sidebar__finals-chevron {
+    flex-shrink: 0;
+    width: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+  }
+
+  .sidebar__finals-nested {
+    list-style: none;
+    margin: 0 0 var(--space-1) 0;
+    padding: 0 0 0 var(--space-2);
+    border-left: 1px solid var(--color-border-subtle);
+    margin-left: calc(var(--space-3) + var(--space-4));
+  }
+
+  .sidebar__finals-nested__item {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+  }
+
+  .sidebar__finals-nested__row {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .sidebar__finals-nested__row:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+  }
+
+  .sidebar__finals-nested__row--active {
+    background: var(--color-accent-muted);
+    color: var(--color-accent);
+  }
+
+  .sidebar__finals-nested__row--queue-source:not(.sidebar__finals-nested__row--active)
+    .sidebar__finals-nested__label {
+    color: var(--color-accent);
+  }
+
+  .sidebar__finals-remove {
+    flex-shrink: 0;
+    padding: var(--space-1);
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar__finals-remove:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
   }
 
   .sidebar__aux-row--rounds .sidebar__aux-row__icon {
