@@ -474,10 +474,36 @@ onDestroy(() => {
         {#if $currentTrack?.artworkUrl}
           <img src={$currentTrack.artworkUrl} alt="" />
         {:else if $isPlaybackBreak}
-          <div class="now-playing-bar__art-ph now-playing-bar__art-ph--break" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
-              <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+          <div
+            class="now-playing-bar__art-ph now-playing-bar__art-ph--break"
+            class:now-playing-bar__art-ph--break-playing={$isPlaying}
+            aria-hidden="true"
+          >
+            <svg
+              class="now-playing-bar__break-hourglass-svg"
+              width="26"
+              height="26"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <path
+                d="M7.2 6.15L12 10.55l4.8-4.4H7.2z"
+                fill="currentColor"
+                opacity="0.13"
+              />
+              <path
+                d="M7.2 17.85h9.6L12 13.45l-4.8 4.4z"
+                fill="currentColor"
+                opacity="0.09"
+              />
+              <path
+                d="M5.75 5.5h12.5M5.75 5.5L12 12l6.25-6.5M5.75 18.5h12.5M5.75 18.5L12 12l6.25 6.5"
+                stroke="currentColor"
+                stroke-width="1.35"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle cx="12" cy="12" r="1.2" fill="currentColor" opacity="0.32" />
             </svg>
           </div>
         {:else}
@@ -720,7 +746,6 @@ onDestroy(() => {
 <style>
   .now-playing-bar {
     flex-shrink: 0;
-    border-top: 1px solid var(--color-border);
     background: var(--color-bg-base);
     /* Shared cap for left label + right spacer (keeps controls centered). */
     --np-side-slot: min(320px, 42vw);
@@ -869,6 +894,31 @@ onDestroy(() => {
     justify-content: center;
     color: var(--color-text-muted);
     background: linear-gradient(145deg, var(--color-bg-elevated), var(--color-bg-overlay));
+  }
+
+  .now-playing-bar__art-ph--break {
+    color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-accent) 28%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .now-playing-bar__art-ph--break-playing .now-playing-bar__break-hourglass-svg {
+    animation: now-playing-bar-break-hourglass-spin 2.5s linear infinite;
+    transform-origin: center;
+  }
+
+  @keyframes now-playing-bar-break-hourglass-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .now-playing-bar__art-ph--break-playing .now-playing-bar__break-hourglass-svg {
+      animation: none;
+    }
   }
 
   .now-playing-bar__meta {

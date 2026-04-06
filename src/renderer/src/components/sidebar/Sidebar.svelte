@@ -1,8 +1,10 @@
 <script lang="ts">
+import { onMount } from 'svelte'
 import { DANCE_CATEGORIES_BY_ID } from '@shared/constants'
+import type { DanceStyle } from '@shared/types'
 import DanceCategoryItem from './DanceCategoryItem.svelte'
 import SidebarCollapsibleGroup from './SidebarCollapsibleGroup.svelte'
-import { latinOrder, standardOrder } from '../../stores/danceOrder.store'
+import { danceOrderActions, latinOrder, standardOrder } from '../../stores/danceOrder.store'
 import SearchBar from './SearchBar.svelte'
 import { get } from 'svelte/store'
 import {
@@ -19,6 +21,12 @@ import { currentTrack, playerActions, playerState } from '../../stores/player.st
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { audioEngine } from '../../services/audioEngine'
 import { folderBadgeColor } from '../../utils/folderBadgeColor'
+import {
+  isDanceListReorderDragPending,
+  peekDanceListReorderDrag,
+  takeDanceListReorderDrag,
+} from '../../utils/danceListReorderDragSession'
+import { computeDanceReorderPreviewOffset } from '../../utils/danceListReorderUi'
 
 // TODO: see docs/practice-modes.md — stub until practice / competition builder ships
 function practiceModesStub(label: string) {
@@ -68,9 +76,83 @@ async function removeFolder(path: string, label: string) {
 }
 
 function showAllTracks() {
+  finalsActions.hideFinalsMainPanel()
   libraryActions.selectDance(null)
   libraryActions.setSearchQuery('')
 }
+
+let latinReorderFrom: number | null = null
+let latinReorderOver: number | null = null
+let standardReorderFrom: number | null = null
+let standardReorderOver: number | null = null
+
+function danceReorderDropTargetIndex(
+  clientX: number,
+  clientY: number,
+  style: DanceStyle,
+): number | null {
+  const top = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+  const hit = top?.closest('[data-dance-reorder-index]') as HTMLElement | null
+  if (!hit) return null
+  if (hit.dataset.danceStyle !== style) return null
+  const v = hit.getAttribute('data-dance-reorder-index')
+  if (v == null) return null
+  const i = Number.parseInt(v, 10)
+  const n = style === 'latin' ? get(latinOrder).length : get(standardOrder).length
+  if (!Number.isFinite(i) || i < 0 || i >= n) return null
+  return i
+}
+
+function commitDanceSidebarReorder(
+  style: DanceStyle,
+  fromIndex: number,
+  toIndex: number | null,
+): void {
+  if (toIndex == null || fromIndex === toIndex) return
+  const order = style === 'latin' ? get(latinOrder) : get(standardOrder)
+  const fromId = order[fromIndex]
+  const beforeId = order[toIndex]
+  if (fromId == null || beforeId == null) return
+  danceOrderActions.reorderInsertBefore(style, fromId, beforeId)
+}
+
+function clearDanceReorderUiState() {
+  latinReorderFrom = null
+  latinReorderOver = null
+  standardReorderFrom = null
+  standardReorderOver = null
+}
+
+onMount(() => {
+  const onDocDragOverCapture = (e: DragEvent) => {
+    const p = peekDanceListReorderDrag()
+    if (!p) return
+    e.preventDefault()
+    const dt = e.dataTransfer
+    if (dt) dt.dropEffect = 'move'
+    const idx = danceReorderDropTargetIndex(e.clientX, e.clientY, p.style)
+    if (p.style === 'latin') latinReorderOver = idx
+    else standardReorderOver = idx
+  }
+
+  const onDocDropCapture = (e: DragEvent) => {
+    if (!isDanceListReorderDragPending()) return
+    const taken = takeDanceListReorderDrag()
+    if (!taken) return
+    e.preventDefault()
+    e.stopPropagation()
+    const over = taken.style === 'latin' ? latinReorderOver : standardReorderOver
+    commitDanceSidebarReorder(taken.style, taken.fromIndex, over)
+    clearDanceReorderUiState()
+  }
+
+  document.addEventListener('dragover', onDocDragOverCapture, true)
+  document.addEventListener('drop', onDocDropCapture, true)
+  return () => {
+    document.removeEventListener('dragover', onDocDragOverCapture, true)
+    document.removeEventListener('drop', onDocDropCapture, true)
+  }
+})
 </script>
 
 <nav class="sidebar">
@@ -105,15 +187,47 @@ function showAllTracks() {
 
   <!-- Latin dances -->
   <SidebarCollapsibleGroup title="Latin" sectionId="sidebar-section-latin" defaultOpen={true}>
-    {#each latinDances as dance}
-      <DanceCategoryItem {dance} />
+    {#each latinDances as dance, i}
+      <DanceCategoryItem
+        {dance}
+        danceReorderIndex={i}
+        reorderDropHighlight={latinReorderFrom !== null && latinReorderOver === i}
+        reorderSourceRow={latinReorderFrom === i}
+        reorderPreviewOffset={computeDanceReorderPreviewOffset(i, latinReorderFrom, latinReorderOver)}
+        reorderAnimating={latinReorderFrom !== null}
+        on:reorderdragstart={(e) => {
+          if (e.detail.style === 'latin') {
+            latinReorderFrom = e.detail.index
+            latinReorderOver = e.detail.index
+          }
+        }}
+        on:reorderdragend={clearDanceReorderUiState}
+      />
     {/each}
   </SidebarCollapsibleGroup>
 
   <!-- Standard dances -->
   <SidebarCollapsibleGroup title="Standard" sectionId="sidebar-section-standard" defaultOpen={true}>
-    {#each standardDances as dance}
-      <DanceCategoryItem {dance} />
+    {#each standardDances as dance, i}
+      <DanceCategoryItem
+        {dance}
+        danceReorderIndex={i}
+        reorderDropHighlight={standardReorderFrom !== null && standardReorderOver === i}
+        reorderSourceRow={standardReorderFrom === i}
+        reorderPreviewOffset={computeDanceReorderPreviewOffset(
+          i,
+          standardReorderFrom,
+          standardReorderOver,
+        )}
+        reorderAnimating={standardReorderFrom !== null}
+        on:reorderdragstart={(e) => {
+          if (e.detail.style === 'standard') {
+            standardReorderFrom = e.detail.index
+            standardReorderOver = e.detail.index
+          }
+        }}
+        on:reorderdragend={clearDanceReorderUiState}
+      />
     {/each}
   </SidebarCollapsibleGroup>
 
@@ -380,7 +494,10 @@ function showAllTracks() {
               $playerState.playbackListFolderPath != null &&
               pathsMatchSidebar($playerState.playbackListFolderPath, dir.path)}
             title={dir.path}
-            on:click={() => libraryActions.selectFolder(dir.path)}
+            on:click={() => {
+              finalsActions.hideFinalsMainPanel()
+              libraryActions.selectFolder(dir.path)
+            }}
           >
             <span
               class="sidebar__folder-icon"
@@ -445,6 +562,7 @@ function showAllTracks() {
   <!-- Footer actions -->
   <div class="sidebar__footer">
     <button
+      type="button"
       class="sidebar__footer-btn"
       on:click={() => libraryActions.pickAddMusicFolder()}
       title="Add music folder"
@@ -455,14 +573,32 @@ function showAllTracks() {
       Add Folder
     </button>
     <button
+      type="button"
       class="sidebar__footer-btn"
-      on:click={() => uiActions.openModal('spotify-login')}
-      title="Connect Spotify"
+      title="Settings"
+      aria-label="Settings"
+      on:click={() => {
+        // TODO: see docs/ui-ux.md — open app settings panel (Spotify, theme, etc.)
+        uiActions.notify('Settings — coming soon.', 'info', 4000)
+      }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.292.24-.437.613-.43.992a6.932 6.932 0 0 1 0 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.379-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
+        />
+        <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
       </svg>
-      Spotify
+      Settings
     </button>
   </div>
 </nav>

@@ -44,8 +44,8 @@ export let filterFolderPath: string | null = null
 $: isCurrent = $currentTrack?.id === track.id
 /** “Now playing” row treatment only in the list where playback was started */
 $: listContextMatches =
-  $playerState.playbackFinalsSessionId == null &&
-  (filterDanceId != null &&
+  ($playerState.playbackFinalsSessionId == null &&
+    filterDanceId != null &&
     $playerState.playbackListDanceId === filterDanceId &&
     $playerState.playbackListFolderPath == null) ||
   (filterDanceId == null &&
@@ -247,14 +247,6 @@ function onUnifiedDragEnd() {
     <span class="track-item__num" class:hidden={isCurrentlyPlaying}>
       {index + 1}
     </span>
-    {#if isCurrentlyPlaying}
-      <div class="track-item__equalizer" aria-hidden="true">
-        <span class="track-item__eq-bar track-item__eq-bar--a"></span>
-        <span class="track-item__eq-bar track-item__eq-bar--b"></span>
-        <span class="track-item__eq-bar track-item__eq-bar--c"></span>
-        <span class="track-item__eq-bar track-item__eq-bar--d"></span>
-      </div>
-    {/if}
     <button
       type="button"
       class="track-item__play-btn"
@@ -273,6 +265,14 @@ function onUnifiedDragEnd() {
         </svg>
       {/if}
     </button>
+    {#if isCurrentlyPlaying}
+      <div class="track-item__equalizer" aria-hidden="true">
+        <span class="track-item__eq-bar track-item__eq-bar--a"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--b"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--c"></span>
+        <span class="track-item__eq-bar track-item__eq-bar--d"></span>
+      </div>
+    {/if}
     </div>
   </div>
 
@@ -652,7 +652,8 @@ function onUnifiedDragEnd() {
     transition: opacity var(--duration-fast) var(--ease-out);
   }
 
-  .track-item__index-main:hover .track-item__equalizer {
+  .track-item__play-btn--playing:hover ~ .track-item__equalizer,
+  .track-item__play-btn--playing:focus-visible ~ .track-item__equalizer {
     opacity: 0;
   }
 
@@ -711,14 +712,32 @@ function onUnifiedDragEnd() {
     cursor: pointer;
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-out);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .track-item__play-btn--playing {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 28px;
   }
 
   .track-item:hover .track-item__play-btn:not(.track-item__play-btn--playing) {
     opacity: 1;
   }
 
-  .track-item__index-main:hover .track-item__play-btn--playing {
+  .track-item__play-btn--playing:hover,
+  .track-item__play-btn--playing:focus-visible {
     opacity: 1;
+  }
+
+  .track-item.track-item--current:hover
+    .track-item__play-btn--playing:not(:hover):not(:focus-visible) {
+    opacity: 0;
   }
 
   .track-item:hover .track-item__index-main .track-item__num:not(.hidden) {

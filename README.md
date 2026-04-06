@@ -122,8 +122,8 @@ docs/               Architecture and domain documentation
 1. Create an app at [developer.spotify.com](https://developer.spotify.com/dashboard)
 2. Add `http://localhost:8888/callback` as a Redirect URI
 3. Copy the Client ID
-4. In Stepify → Settings, paste the Client ID
-5. Click "Connect Spotify"
+4. Set the Client ID via `SPOTIFY_CLIENT_ID` in `.env` (see `example.env`) and/or persisted `spotifyClientId` in app settings (see `docs/spotify-integration.md`)
+5. Use **Settings** in the app sidebar (cog) to connect Spotify once the settings panel ships; until then, login is only via dev/IPC flows described in `docs/spotify-integration.md`
 
 ---
 

@@ -5,7 +5,7 @@ import FinalsPanel from '../finals/FinalsPanel.svelte'
 import NowPlayingBar from '../player/NowPlayingBar.svelte'
 import PlayerSidebar from '../player/PlayerSidebar.svelte'
 import { sidebarCollapsed } from '../../stores/ui.store'
-import { finalsFlow } from '../../stores/finals.store'
+import { finalsFlow, finalsMainPanelOpen } from '../../stores/finals.store'
 import Notifications from './Notifications.svelte'
 import AssignDanceModal from '../modals/AssignDanceModal.svelte'
 import AssignFolderDanceModal from '../modals/AssignFolderDanceModal.svelte'
@@ -20,7 +20,7 @@ import TrackMetadataModal from '../modals/TrackMetadataModal.svelte'
     </div>
 
     <main class="content-col">
-      {#if $finalsFlow != null}
+      {#if $finalsFlow != null && $finalsMainPanelOpen}
         <FinalsPanel />
       {:else}
         <TrackList />

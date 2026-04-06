@@ -33,12 +33,15 @@ interface FinalsUiState {
   sessions: FinalsPersistedSession[]
   activeSessionId: string | null
   finalsNavExpanded: boolean
+  /** When true, main content shows {@link FinalsPanel}; library rows hide the panel but keep `activeSessionId`. */
+  finalsMainVisible: boolean
 }
 
 const emptyUi: FinalsUiState = {
   sessions: [],
   activeSessionId: null,
   finalsNavExpanded: false,
+  finalsMainVisible: false,
 }
 
 export const finalsState = writable<FinalsUiState>(emptyUi)
@@ -53,6 +56,8 @@ export const activeFinalsSession = derived(finalsState, ($s) => {
   if ($s.activeSessionId == null) return null
   return $s.sessions.find((x) => x.id === $s.activeSessionId) ?? null
 })
+
+export const finalsMainPanelOpen = derived(finalsState, ($s) => $s.finalsMainVisible)
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null
 function schedulePersistFinalsSessions() {
@@ -129,8 +134,10 @@ export const finalsActions = {
       sessions: [...s.sessions, sess],
       activeSessionId: id,
       finalsNavExpanded: true,
+      finalsMainVisible: true,
     }))
     schedulePersistFinalsSessions()
+    libraryActions.selectDance(null)
   },
 
   openSession(id: string) {
@@ -138,12 +145,18 @@ export const finalsActions = {
       ...s,
       activeSessionId: id,
       finalsNavExpanded: true,
+      finalsMainVisible: true,
     }))
     libraryActions.selectDance(null)
   },
 
+  /** Show track list while keeping the selected final (and finals playback) active. */
+  hideFinalsMainPanel() {
+    finalsState.update((s) => (s.finalsMainVisible ? { ...s, finalsMainVisible: false } : s))
+  },
+
   closePanel() {
-    finalsState.update((s) => ({ ...s, activeSessionId: null }))
+    finalsState.update((s) => ({ ...s, activeSessionId: null, finalsMainVisible: false }))
   },
 
   removeSession(id: string) {
@@ -160,6 +173,7 @@ export const finalsActions = {
         sessions,
         activeSessionId,
         finalsNavExpanded: sessions.length > 0 ? s.finalsNavExpanded : false,
+        finalsMainVisible: activeSessionId != null ? s.finalsMainVisible : false,
       }
     })
     schedulePersistFinalsSessions()
@@ -181,6 +195,14 @@ export const finalsActions = {
     if (!id) return
     const sec = Math.max(0, Math.min(600, Math.floor(Number(n)) || 0))
     updateSession(id, { gapBetweenFinalsSec: sec })
+  },
+
+  setLabelForActive(raw: string) {
+    const id = get(finalsState).activeSessionId
+    if (!id) return
+    const label = raw.trim().slice(0, 80)
+    if (!label) return
+    updateSession(id, { label })
   },
 
   startConfigure() {

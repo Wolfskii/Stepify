@@ -9,7 +9,7 @@ The Spotify integration is scaffolded with typed interfaces and a PKCE auth skel
 ## Architecture
 
 ```
-User clicks "Connect Spotify"
+User triggers Spotify login from the future **Settings** panel (sidebar footer **Settings** is reserved for this; no longer a separate Spotify footer row)
         │
         ▼
 spotifyService.login()  [renderer]

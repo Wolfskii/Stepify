@@ -3,7 +3,6 @@ import { derived, writable } from 'svelte/store'
 type Panel = 'library' | 'spotify' | 'practice'
 type Modal =
   | 'add-directory'
-  | 'spotify-login'
   | 'settings'
   | 'assign-dance'
   | 'assign-folder-dance'

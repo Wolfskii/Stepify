@@ -1,12 +1,29 @@
 <script lang="ts">
-import type { DanceCategory, DanceId } from '@shared/types'
+import { createEventDispatcher } from 'svelte'
+import type { DanceCategory, DanceId, DanceStyle } from '@shared/types'
 import { libraryActions, selectedDanceId } from '../../stores/library.store'
-import { danceOrderActions, reorderMimeForStyle } from '../../stores/danceOrder.store'
+import { finalsActions } from '../../stores/finals.store'
+import { reorderMimeForStyle } from '../../stores/danceOrder.store'
 import { playerState } from '../../stores/player.store'
 import SidebarPlaybackIndicator from './SidebarPlaybackIndicator.svelte'
 import { TRACK_ASSIGN_DRAG_MIME } from '../../utils/libraryDrag'
+import {
+  clearDanceListReorderDrag,
+  setDanceListReorderDragOrigin,
+} from '../../utils/danceListReorderDragSession'
 
 export let dance: DanceCategory
+/** Index within Latin or Standard list (for reorder preview). */
+export let danceReorderIndex = 0
+export let reorderDropHighlight = false
+export let reorderSourceRow = false
+export let reorderPreviewOffset = 0
+export let reorderAnimating = false
+
+const dispatch = createEventDispatcher<{
+  reorderdragstart: { index: number; style: DanceStyle }
+  reorderdragend: Record<string, never>
+}>()
 
 let rowEl: HTMLDivElement
 let dropHover = false
@@ -24,6 +41,7 @@ $: danceRowTitle =
   (isPlaybackSource ? ' — playback from this list' : '')
 
 function select() {
+  finalsActions.hideFinalsMainPanel()
   libraryActions.selectDance(isSelected ? null : dance.id)
 }
 
@@ -49,12 +67,16 @@ function isReorderDrag(e: DragEvent) {
 function onRowDragStart(e: DragEvent) {
   const dt = e.dataTransfer
   if (!dt) return
+  setDanceListReorderDragOrigin(dance.style, danceReorderIndex, dance.id)
   dt.setData(reorderMime, dance.id)
   dt.effectAllowed = 'move'
+  dispatch('reorderdragstart', { index: danceReorderIndex, style: dance.style })
 }
 
 function onRowDragEnd() {
   reorderHover = false
+  dispatch('reorderdragend', {})
+  queueMicrotask(() => clearDanceListReorderDrag())
 }
 
 function onRowDragOver(e: DragEvent) {
@@ -102,17 +124,9 @@ async function onRowDrop(e: DragEvent) {
     }
     if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) return
     await libraryActions.assignDanceToTracks(ids as string[], dance.id as DanceId)
-    return
   }
 
-  if (isReorderDrag(e)) {
-    e.preventDefault()
-    dropHover = false
-    reorderHover = false
-    const fromId = dt.getData(reorderMime) as DanceId
-    if (!fromId || fromId === dance.id) return
-    danceOrderActions.reorderInsertBefore(dance.style, fromId, dance.id)
-  }
+  /* Dance reorder is committed on document capture (see Sidebar) — Chromium/Electron getData quirks. */
 }
 </script>
 
@@ -123,7 +137,13 @@ async function onRowDrop(e: DragEvent) {
   class:dance-item--queue-source={isPlaybackSource}
   class:dance-item--drop-hover={dropHover}
   class:dance-item--reorder-hover={reorderHover}
+  class:dance-item--reorder-target={reorderDropHighlight}
+  class:dance-item--reorder-source={reorderSourceRow}
+  class:dance-item--reorder-animate={reorderAnimating}
+  data-dance-reorder-index={danceReorderIndex}
+  data-dance-style={dance.style}
   style="--dance-color: {dance.color}"
+  style:transform={reorderPreviewOffset !== 0 ? `translateY(${reorderPreviewOffset}px)` : null}
   draggable="true"
   role="button"
   tabindex="0"
@@ -201,6 +221,22 @@ async function onRowDrop(e: DragEvent) {
     box-shadow: inset 0 2px 0 0 var(--color-accent);
   }
 
+  .dance-item--reorder-target {
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+  }
+
+  .dance-item--reorder-source {
+    opacity: 0.28;
+  }
+
+  .dance-item--reorder-animate {
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-out),
+      transform 0.15s var(--ease-out);
+  }
+
   /* Same width as folder / stub row icons so labels share one vertical rhythm */
   .dance-item__lead {
     flex-shrink: 0;
@@ -232,5 +268,11 @@ async function onRowDrop(e: DragEvent) {
   /* Spotify-style: queue started from this dance — accent title even when another filter is selected */
   .dance-item--queue-source:not(.selected) .dance-item__name {
     color: var(--color-accent);
+  }
+
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
