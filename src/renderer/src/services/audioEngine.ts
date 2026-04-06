@@ -25,6 +25,11 @@ export interface BpmFromFilePayload {
  * of tempo change.
  */
 export class AudioEngine {
+  private static readonly TARGET_TRACK_LOUDNESS_DBFS = -18
+  private static readonly NORMALIZATION_MAX_BOOST_DB = 10
+  private static readonly NORMALIZATION_MAX_CUT_DB = 12
+  private static readonly NORMALIZATION_SAMPLE_STRIDE = 256
+
   private context: AudioContext | null = null
   private gainNode: GainNode | null = null
   private sourceNode: AudioBufferSourceNode | null = null
@@ -35,6 +40,8 @@ export class AudioEngine {
   private _pausedAt = 0
   private _tempo = 1.0
   private _volume = 0.8
+  /** Per-track loudness compensation (1 = unchanged). */
+  private _trackNormalizationGain = 1
   private _duration = 0
   /** Stop playback and emit `ended` at this source-file second (null = play full buffer). */
   private _playbackEndCap: number | null = null
@@ -54,7 +61,7 @@ export class AudioEngine {
     if (!this.context || this.context.state === 'closed') {
       this.context = new AudioContext()
       this.gainNode = this.context.createGain()
-      this.gainNode.gain.value = this._volume
+      this.gainNode.gain.value = this.baseOutputGain
       this.gainNode.connect(this.context.destination)
     }
     return this.context
@@ -70,6 +77,7 @@ export class AudioEngine {
 
     this.clearPlaybackEndCap()
     this.stop()
+    this._trackNormalizationGain = 1
     this.loadedTrackId = null
     this.loadTargetTrackId = track.id
 
@@ -93,6 +101,7 @@ export class AudioEngine {
       }
 
       this.audioBuffer = await ctx.decodeAudioData(response.data)
+      this._trackNormalizationGain = this.computeTrackNormalizationGain(this.audioBuffer)
       this._duration = this.audioBuffer.duration
       this._pausedAt = 0
       this.loadedTrackId = trackId
@@ -134,7 +143,7 @@ export class AudioEngine {
     if (!buf) return
 
     const { detectBpmFromAudioBuffer } = await import('./bpmDetector')
-    const detected = await detectBpmFromAudioBuffer(ctx, buf)
+    const detected = await detectBpmFromAudioBuffer(ctx, buf, track.dances)
     if (this.loadTargetTrackId !== trackId || detected == null) return
 
     const lower = filePath.toLowerCase()
@@ -195,7 +204,45 @@ export class AudioEngine {
   private applyOutputGain(elapsed: number): void {
     if (!this.gainNode) return
     const mult = this.gainMultiplierForElapsed(elapsed)
-    this.gainNode.gain.value = this._volume * mult
+    this.gainNode.gain.value = this.baseOutputGain * mult
+  }
+
+  private get baseOutputGain(): number {
+    return this._volume * this._trackNormalizationGain
+  }
+
+  private computeTrackNormalizationGain(buffer: AudioBuffer): number {
+    const channels = buffer.numberOfChannels
+    const frames = buffer.length
+    if (channels <= 0 || frames <= 0) return 1
+
+    let sumSquares = 0
+    let sampleCount = 0
+    const stride = AudioEngine.NORMALIZATION_SAMPLE_STRIDE
+
+    for (let ch = 0; ch < channels; ch += 1) {
+      const data = buffer.getChannelData(ch)
+      for (let i = 0; i < data.length; i += stride) {
+        const x = data[i] ?? 0
+        sumSquares += x * x
+        sampleCount += 1
+      }
+    }
+
+    if (sampleCount === 0) return 1
+    const rms = Math.sqrt(sumSquares / sampleCount)
+    if (!(rms > 0)) return 1
+
+    const loudnessDb = 20 * Math.log10(rms)
+    const deltaDbRaw = AudioEngine.TARGET_TRACK_LOUDNESS_DBFS - loudnessDb
+    const deltaDb = Math.max(
+      -AudioEngine.NORMALIZATION_MAX_CUT_DB,
+      Math.min(AudioEngine.NORMALIZATION_MAX_BOOST_DB, deltaDbRaw),
+    )
+
+    const gain = 10 ** (deltaDb / 20)
+    if (!Number.isFinite(gain) || gain <= 0) return 1
+    return gain
   }
 
   private finishPlaybackAtCap(elapsedForUi: number): void {
@@ -215,7 +262,7 @@ export class AudioEngine {
       }
     }
     if (this.gainNode) {
-      this.gainNode.gain.value = this._volume
+      this.gainNode.gain.value = this.baseOutputGain
     }
     this.clearPlaybackEndCap()
     this.emit('ended', undefined)
@@ -248,7 +295,7 @@ export class AudioEngine {
         this.stopTimeUpdates()
         this.clearPlaybackEndCap()
         if (this.gainNode) {
-          this.gainNode.gain.value = this._volume
+          this.gainNode.gain.value = this.baseOutputGain
         }
         this.emit('ended', undefined)
       }
@@ -278,7 +325,7 @@ export class AudioEngine {
       }
     }
     if (this.gainNode) {
-      this.gainNode.gain.value = this._volume
+      this.gainNode.gain.value = this.baseOutputGain
     }
   }
 
@@ -353,7 +400,7 @@ export class AudioEngine {
       const elapsed = this.currentTime
       this.applyOutputGain(elapsed)
     } else {
-      this.gainNode.gain.setTargetAtTime(this._volume, ctx.currentTime, 0.01)
+      this.gainNode.gain.setTargetAtTime(this.baseOutputGain, ctx.currentTime, 0.01)
     }
   }
 

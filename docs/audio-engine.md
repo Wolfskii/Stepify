@@ -11,6 +11,8 @@ The engine exposes a simple interface to the rest of the app:
 - Set volume
 - Subscribe to time update and ended events
 
+For local tracks, playback now also applies **per-track loudness normalization** so songs stay in a similar perceived dB range during queues.
+
 ---
 
 ## Current Implementation (Stub)
@@ -46,6 +48,9 @@ libraryService                      AudioEngine.load(track)
 When a local file loads and **no BPM exists in tags** (and the library track has no stored BPM), Stepify:
 
 1. Runs **`web-audio-beat-detector`** on the decoded `AudioBuffer` (first ~120s) in the renderer.
+   - If the track has **exactly one dance** assigned, detection uses that dance’s competition BPM range (with a small padding) as `minTempo` / `maxTempo` so the library **folds** beat intervals into the right octave instead of locking onto subdivisions (e.g. Rumba misread as ~170 BPM).
+   - For **Rumba** and **Samba**, audio is **mono-summed and low-pass filtered** (~190 Hz) first so transient hi-hat / syncopation peaks disturb the estimate less.
+   - A final **ratio pass** maps obvious double-time results (still outside the dance band) toward the competition range when safe.
 2. If a value in a plausible range (60–220) is returned:
    - **`.mp3`**: writes **TBPM** via **`node-id3`** (`update`, preserves other tags).
    - **`.flac`**: merges a **`BPM`** Vorbis comment via **`flac-tagger`**.
@@ -53,6 +58,19 @@ When a local file loads and **no BPM exists in tags** (and the library track has
 3. Notifies the UI via the existing **`bpmFromFile`** event so the player and list stay in sync.
 
 Re-scanning the library will then pick up embedded BPM through `music-metadata`.
+
+---
+
+## Loudness normalization (local tracks)
+
+When a local file is decoded, the renderer estimates its RMS loudness in dBFS from the decoded `AudioBuffer` and computes a per-track gain offset toward a target of **-18 dBFS**.
+
+- Formula: `loudnessDb = 20 * log10(rms)`
+- Compensation: `targetDb - loudnessDb`
+- Safety clamp: **max boost +10 dB**, **max cut -12 dB**
+- Applied at output gain together with the user volume and finals end-fade multiplier
+
+This keeps playback level changes between songs more controlled without changing stored files on disk.
 
 ---
 

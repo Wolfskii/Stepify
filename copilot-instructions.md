@@ -121,6 +121,8 @@ audioEngine.pause()
 audioEngine.seek(30)           // seconds
 audioEngine.setTempo(0.95)     // -5%
 audioEngine.setVolume(0.8)     // 0.0–1.0
+// Local tracks are normalized on load to a target loudness (-18 dBFS),
+// with bounded compensation (+10 dB max boost / -12 dB max cut).
 
 audioEngine.on('timeupdate', (time: number) => { ... })
 audioEngine.on('ended', () => { ... })

@@ -52,7 +52,7 @@ export async function resolveBpmForLocalTrack(
       if (track.bpm != null && track.bpm > 0) return track.bpm
     }
 
-    const detected = await detectBpmFromAudioBuffer(ctx, buffer)
+    const detected = await detectBpmFromAudioBuffer(ctx, buffer, track.dances)
     if (detected == null) return null
 
     const ok = await persistBpmToLibrary(track.id, track.localPath, detected)
