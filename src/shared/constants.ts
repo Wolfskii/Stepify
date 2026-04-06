@@ -8,7 +8,7 @@ export const DANCE_CATEGORIES: DanceCategory[] = [
     id: 'samba',
     name: 'Samba',
     style: 'latin',
-    bpmRange: [96, 104],
+    bpmRange: [100, 104],
     color: '#eab308',
   },
   {
@@ -22,21 +22,22 @@ export const DANCE_CATEGORIES: DanceCategory[] = [
     id: 'rumba',
     name: 'Rumba',
     style: 'latin',
-    bpmRange: [96, 100],
+    /** International (WDSF-style) Latin: ~25–27 MPM in 4/4 ≈ 100–108 BPM */
+    bpmRange: [100, 108],
     color: '#ec4899',
   },
   {
     id: 'paso-doble',
     name: 'Paso Doble',
     style: 'latin',
-    bpmRange: [112, 124],
+    bpmRange: [120, 124],
     color: '#dc2626',
   },
   {
     id: 'jive',
     name: 'Jive',
     style: 'latin',
-    bpmRange: [152, 176],
+    bpmRange: [168, 176],
     color: '#7c3aed',
   },
   // Standard
@@ -51,7 +52,7 @@ export const DANCE_CATEGORIES: DanceCategory[] = [
     id: 'tango',
     name: 'Tango',
     style: 'standard',
-    bpmRange: [112, 120],
+    bpmRange: [124, 132],
     color: '#1d4ed8',
   },
   {
@@ -72,7 +73,7 @@ export const DANCE_CATEGORIES: DanceCategory[] = [
     id: 'quickstep',
     name: 'Quickstep',
     style: 'standard',
-    bpmRange: [196, 208],
+    bpmRange: [200, 208],
     color: '#f59e0b',
   },
 ]

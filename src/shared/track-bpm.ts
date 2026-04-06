@@ -4,6 +4,10 @@ import type { DanceId, Track } from './types'
 /** Widen competition BPM range slightly for `web-audio-beat-detector` tempo folding. */
 const BPM_DETECT_ASSIGNMENT_PADDING = 8
 
+/** If file TBPM is outside this band vs the **single** assigned dance, ignore the tag and re-detect. */
+const BPM_TAG_VS_ASSIGNED_DANCE_PAD_LOW = 12
+const BPM_TAG_VS_ASSIGNED_DANCE_PAD_HIGH = 20
+
 /**
  * Slow Latin dances where syncopation / intermittent percussion often confuses peak-based BPM
  * detection; see `bpmDetector` low-pass preprocessing.
@@ -65,6 +69,23 @@ export function bpmDetectionTempoWindow(
     minTempo: Math.max(60, low - BPM_DETECT_ASSIGNMENT_PADDING),
     maxTempo: Math.min(220, high + BPM_DETECT_ASSIGNMENT_PADDING),
   }
+}
+
+/**
+ * When exactly one dance is set, embedded BPM is only trusted if it plausibly matches that
+ * dance’s competition range (catches wrong TBPM / double-time tags vs e.g. Rumba).
+ */
+export function assignedDanceDisagreesWithTaggedBpm(
+  bpm: number,
+  dances: DanceId[] | undefined,
+): boolean {
+  if (!dances || dances.length !== 1) return false
+  const cat = DANCE_CATEGORIES_BY_ID[dances[0]]
+  if (!cat || !Number.isFinite(bpm) || bpm <= 0) return false
+  const [low, high] = cat.bpmRange
+  const lo = low - BPM_TAG_VS_ASSIGNED_DANCE_PAD_LOW
+  const hi = high + BPM_TAG_VS_ASSIGNED_DANCE_PAD_HIGH
+  return bpm < lo || bpm > hi
 }
 
 /**

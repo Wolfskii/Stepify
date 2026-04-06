@@ -1,3 +1,4 @@
+import { assignedDanceDisagreesWithTaggedBpm } from '@shared/track-bpm'
 import type { Track } from '@shared/types'
 import { detectBpmFromAudioBuffer } from './bpmDetector'
 
@@ -43,13 +44,21 @@ export async function resolveBpmForLocalTrack(
           ? Math.round(meta.data.bpm)
           : undefined
       if (tagBpm != null) {
-        const needsLibrary = !(track.bpm != null && track.bpm > 0)
-        if (needsLibrary) {
-          await window.electronAPI.library.setTrackBpm(track.id, tagBpm)
+        if (!assignedDanceDisagreesWithTaggedBpm(tagBpm, track.dances)) {
+          const needsLibrary = !(track.bpm != null && track.bpm > 0)
+          if (needsLibrary) {
+            await window.electronAPI.library.setTrackBpm(track.id, tagBpm)
+          }
+          return tagBpm
         }
-        return tagBpm
       }
-      if (track.bpm != null && track.bpm > 0) return track.bpm
+      if (
+        track.bpm != null &&
+        track.bpm > 0 &&
+        !assignedDanceDisagreesWithTaggedBpm(track.bpm, track.dances)
+      ) {
+        return track.bpm
+      }
     }
 
     const detected = await detectBpmFromAudioBuffer(ctx, buffer, track.dances)

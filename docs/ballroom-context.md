@@ -21,10 +21,10 @@ Five dances performed in closed hold, characterized by elegant posture, rise and
 | Dance           | Character              | BPM range | Time signature |
 |-----------------|------------------------|-----------|----------------|
 | Slow Waltz      | Romantic, lilting      | 84–90     | 3/4            |
-| Tango           | Staccato, dramatic     | 112–120   | 4/4            |
+| Tango           | Staccato, dramatic     | 124–132   | 4/4            |
 | Viennese Waltz  | Fast, flowing          | 174–180   | 3/4            |
 | Foxtrot         | Smooth, sophisticated  | 112–120   | 4/4            |
-| Quickstep       | Fast, light, energetic | 196–208   | 4/4            |
+| Quickstep       | Fast, light, energetic | 200–208   | 4/4            |
 
 ### Latin
 
@@ -33,12 +33,12 @@ Five dances with hip motion (Cuban motion), performed in more open holds.
 | Dance       | Character                  | BPM range | Time signature |
 |-------------|----------------------------|-----------|----------------|
 | Cha Cha     | Playful, syncopated        | 120–128   | 4/4            |
-| Samba       | Bouncy, carnival energy    | 96–104    | 2/4            |
-| Rumba       | Slow, sensual, romantic    | 96–100    | 4/4            |
-| Paso Doble  | Dramatic, Spanish march    | 112–124   | 2/4            |
-| Jive        | Fast, bouncy, rock-and-roll| 152–176   | 4/4            |
+| Samba       | Bouncy, carnival energy    | 100–104   | 2/4            |
+| Rumba       | Slow, sensual, romantic    | 100–108   | 4/4            |
+| Paso Doble  | Dramatic, Spanish march    | 120–124   | 2/4            |
+| Jive        | Fast, bouncy, rock-and-roll| 168–176   | 4/4            |
 
-> **Note:** BPM ranges above are competition standards. In training, dancers often practice at 70–80% tempo to develop technique before gradually increasing to full speed.
+> **Note:** BPM ranges above follow **international DanceSport** practice (e.g. WDSF Latin Rumba is commonly quoted as **25–27 MPM** in 4/4, i.e. **100–108 BPM**). In training, dancers often practice at 70–80% tempo to develop technique before gradually increasing to full speed.
 
 ---
 

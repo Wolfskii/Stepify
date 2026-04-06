@@ -41,8 +41,8 @@ async function saveManual() {
       return
     }
     playerActions.mergeCurrentTrackBpm(Math.round(v), track.id)
-    inputStr = String(Math.round(v))
     uiActions.notify('BPM saved', 'success')
+    close()
   } finally {
     busy = false
   }

@@ -1,4 +1,5 @@
 import { PLAYBACK_CAP_END_FADE_SEC } from '@shared/constants'
+import { assignedDanceDisagreesWithTaggedBpm } from '@shared/track-bpm'
 import type { Track } from '@shared/types'
 
 type AudioEngineEvent = 'timeupdate' | 'ended' | 'loaded' | 'error' | 'bpmFromFile'
@@ -131,13 +132,19 @@ export class AudioEngine {
       meta.success && meta.data?.bpm != null && meta.data.bpm > 0
         ? Math.round(meta.data.bpm)
         : undefined
-    if (tagBpm != null) {
+    if (tagBpm != null && !assignedDanceDisagreesWithTaggedBpm(tagBpm, track.dances)) {
       const payload: BpmFromFilePayload = { bpm: tagBpm, trackId }
       this.emit('bpmFromFile', payload)
       return
     }
 
-    if (track.bpm != null && track.bpm > 0) return
+    if (
+      track.bpm != null &&
+      track.bpm > 0 &&
+      !assignedDanceDisagreesWithTaggedBpm(track.bpm, track.dances)
+    ) {
+      return
+    }
 
     const buf = this.audioBuffer
     if (!buf) return

@@ -45,9 +45,11 @@ libraryService                      AudioEngine.load(track)
 
 ## BPM detection and embedding
 
-When a local file loads and **no BPM exists in tags** (and the library track has no stored BPM), Stepify:
+When a local file loads and the track still needs a **reliable** BPM (no usable embedded value / library value), Stepify:
 
-1. Runs **`web-audio-beat-detector`** on the decoded `AudioBuffer` (first ~120s) in the renderer.
+1. Runs **`web-audio-beat-detector`** on sampled windows from the decoded `AudioBuffer` in the renderer.
+   - **Embedded TBPM is skipped** when it is **implausible for the single assigned dance** (outside the competition-range band with padding); analysis runs instead so first playback matches “detect from file”.
+   - Detection samples **up to five windows** across longer tracks; estimates are combined with a **tight-cluster preference** (typical agreement wins) and **deviation trimming** so one or two bad sections (silence, breakdowns) barely move the result.
    - If the track has **exactly one dance** assigned, detection uses that dance’s competition BPM range (with a small padding) as `minTempo` / `maxTempo` so the library **folds** beat intervals into the right octave instead of locking onto subdivisions (e.g. Rumba misread as ~170 BPM).
    - For **Rumba** and **Samba**, audio is **mono-summed and low-pass filtered** (~190 Hz) first so transient hi-hat / syncopation peaks disturb the estimate less.
    - A final **ratio pass** maps obvious double-time results (still outside the dance band) toward the competition range when safe.
