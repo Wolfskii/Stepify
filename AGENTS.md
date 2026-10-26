@@ -174,7 +174,8 @@ Keep edits proportional: one-line fixes do not require rewriting every doc.
 ## Learned Workspace Facts
 
 - Tempo slider limits are ±32% via `TEMPO_MIN_PERCENT` and `TEMPO_MAX_PERCENT` in `src/shared/constants.ts` (supersedes older ±20% examples where they conflict).
-- `soundtouch-ts` is 1.x only on npm (e.g. `^1.1.1`, not `^0.1.0` — `ETARGET` otherwise); main imports `@electron-toolkit/utils` from `src/main/index.ts` — keep it in `package.json` dependencies.
+- Main imports `@electron-toolkit/utils` from `src/main/index.ts` — keep it in `package.json` dependencies.
+- Local playback is an `HTMLAudioElement` (`preservesPitch`) routed through Web Audio; `soundtouch-ts` was removed as unused. Renderer typechecking is `svelte-check` (`svelte.config.mjs` holds the preprocess options shared with Vite).
 - Renderer Content Security Policy must include `worker-src 'self' blob:` when using `web-audio-beat-detector`, which loads workers from `blob:` URLs.
 - Automatic BPM uses `web-audio-beat-detector` on decoded audio; writing back to files is supported for MP3 (`node-id3`, TBPM) and FLAC (`flac-tagger`, BPM comment); other formats store detected BPM in the library persistence layer only. When exactly **one** dance is assigned, detection passes that dance’s BPM band as tempo bounds; **Rumba/Samba** also use a low-passed mono pass before analysis to reduce syncopation-driven double-time errors. Up to **five** temporal samples are aggregated (cluster + outlier resistance); **TBPM that clashes with the assigned dance** is ignored so first play does not stick to a wrong file tag.
 - Lint/format: **Biome** (`npm run lint`, `npm run lint:fix`, `biome.json`); in `.svelte` scripts Biome relaxes unused-import/organize rules when symbols are template-only. TypeScript in Svelte needs `svelte-preprocess` on the Vite plugin; strict unused stripping can remove template-only imports — this repo’s preprocessor avoids that.

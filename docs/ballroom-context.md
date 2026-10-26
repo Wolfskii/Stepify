@@ -105,7 +105,7 @@ Ballroom music is highly structured. Most pieces are arranged in **8-count phras
 | Domain Concept | Feature Impact |
 |----------------|---------------|
 | BPM standards per dance | Auto-suggest BPM range when tagging a track |
-| Tempo-preserving pitch control | SoundTouch (or AudioWorklet) required — not just `playbackRate` |
+| Tempo-preserving pitch control | `preservesPitch` on the media element; quality at the ±32% limits still to be verified (see `docs/audio-engine.md`) |
 | Round structure | Practice Mode: configure dance sequence + durations |
 | Training at sub-tempo | Tempo slider range -32% to +32%, keyboard fine-control |
 | Competition music matching | BPM display must show adjusted BPM, not just percentage |

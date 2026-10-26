@@ -13,17 +13,13 @@ export interface BpmFromFilePayload {
 /**
  * AudioEngine — core audio playback service.
  *
- * Uses the Web Audio API for routing and the SoundTouch algorithm
- * for pitch-preserving tempo control (time stretching without chipmunk effect).
+ *   [file bytes] → Blob URL → <audio> (playbackRate + preservesPitch)
+ *       → [MediaElementAudioSourceNode] → [GainNode] → [destination]
  *
- * Architecture:
- *
- *   [ArrayBuffer] → [AudioContext.decodeAudioData]
- *       → [ScriptProcessorNode (SoundTouch)] → [GainNode] → [destination]
- *
- * The SoundTouch node processes PCM samples in real time, applying the tempo
- * ratio before the audio reaches the output. Pitch is kept constant regardless
- * of tempo change.
+ * Tempo uses Chromium's built-in WSOLA time stretcher (`preservesPitch`), which runs in the
+ * media pipeline rather than on the UI thread — a main-thread ScriptProcessor would glitch
+ * whenever the Svelte UI is busy. The same bytes are also decoded to an `AudioBuffer` for
+ * loudness normalization and BPM detection. See docs/audio-engine.md.
  */
 export class AudioEngine {
   private static readonly TARGET_TRACK_LOUDNESS_DBFS = -18
@@ -33,11 +29,13 @@ export class AudioEngine {
 
   private context: AudioContext | null = null
   private gainNode: GainNode | null = null
-  private sourceNode: AudioBufferSourceNode | null = null
+  /** One element for the app's lifetime: `createMediaElementSource` may only be called once per element. */
+  private media: HTMLAudioElement | null = null
+  private mediaUrl: string | null = null
   private audioBuffer: AudioBuffer | null = null
 
   private _isPlaying = false
-  private _startedAt = 0
+  /** Source-file position to resume from while paused / before the first play. */
   private _pausedAt = 0
   private _tempo = 1.0
   private _volume = 0.8
@@ -64,8 +62,34 @@ export class AudioEngine {
       this.gainNode = this.context.createGain()
       this.gainNode.gain.value = this.baseOutputGain
       this.gainNode.connect(this.context.destination)
+      this.context.createMediaElementSource(this.ensureMedia()).connect(this.gainNode)
     }
     return this.context
+  }
+
+  private ensureMedia(): HTMLAudioElement {
+    if (this.media) return this.media
+    const media = new Audio()
+    media.preload = 'auto'
+    media.preservesPitch = true
+    media.addEventListener('ended', () => this.handleMediaEnded())
+    media.addEventListener('error', () => {
+      if (media.src) this.emit('error', 'Could not play this audio file')
+    })
+    this.media = media
+    return media
+  }
+
+  private releaseMediaSource(): void {
+    if (this.media) {
+      this.media.pause()
+      this.media.removeAttribute('src')
+      this.media.load()
+    }
+    if (this.mediaUrl) {
+      URL.revokeObjectURL(this.mediaUrl)
+      this.mediaUrl = null
+    }
   }
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -78,6 +102,8 @@ export class AudioEngine {
 
     this.clearPlaybackEndCap()
     this.stop()
+    this.releaseMediaSource()
+    this.audioBuffer = null
     this._trackNormalizationGain = 1
     this.loadedTrackId = null
     this.loadTargetTrackId = track.id
@@ -101,10 +127,27 @@ export class AudioEngine {
         return
       }
 
-      this.audioBuffer = await ctx.decodeAudioData(response.data)
-      this._trackNormalizationGain = this.computeTrackNormalizationGain(this.audioBuffer)
-      this._duration = this.audioBuffer.duration
+      if (this.loadTargetTrackId !== trackId) return
+
+      // Blob copies the bytes; decodeAudioData detaches the ArrayBuffer it is given.
+      const url = URL.createObjectURL(new Blob([response.data]))
+      const buffer = await ctx.decodeAudioData(response.data)
+      if (this.loadTargetTrackId !== trackId) {
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      const media = this.ensureMedia()
+      this.mediaUrl = url
+      media.src = url
+      media.defaultPlaybackRate = this._tempo
+      media.playbackRate = this._tempo
+
+      this.audioBuffer = buffer
+      this._trackNormalizationGain = this.computeTrackNormalizationGain(buffer)
+      this._duration = buffer.duration
       this._pausedAt = 0
+      this.applyBaseGain()
       this.loadedTrackId = trackId
       this.emit('loaded', undefined)
 
@@ -252,151 +295,114 @@ export class AudioEngine {
     return gain
   }
 
-  private finishPlaybackAtCap(elapsedForUi: number): void {
+  private finishPlaybackAtCap(): void {
     if (this._finishingCapEnd) return
     this._finishingCapEnd = true
-    const src = this.sourceNode
-    this.sourceNode = null
     this._isPlaying = false
-    this._pausedAt = this._playbackEndCap ?? elapsedForUi
+    this._pausedAt = this._playbackEndCap ?? this.mediaPosition
     this.stopTimeUpdates()
-    if (src) {
-      src.onended = null
-      try {
-        src.stop()
-      } catch {
-        /* already stopped */
-      }
-    }
-    if (this.gainNode) {
-      this.gainNode.gain.value = this.baseOutputGain
-    }
+    this.media?.pause()
+    this.applyBaseGain()
     this.clearPlaybackEndCap()
     this.emit('ended', undefined)
+  }
+
+  /** Only the natural end of the file reaches here; pause/seek/stop never fire `ended`. */
+  private handleMediaEnded(): void {
+    if (this._finishingCapEnd || !this._isPlaying) return
+    this._isPlaying = false
+    this._pausedAt = 0
+    this.stopTimeUpdates()
+    this.clearPlaybackEndCap()
+    this.applyBaseGain()
+    this.emit('ended', undefined)
+  }
+
+  private get hasLocalMedia(): boolean {
+    return this.audioBuffer != null && this.mediaUrl != null
+  }
+
+  private get mediaPosition(): number {
+    return this.media?.currentTime ?? 0
+  }
+
+  private applyBaseGain(): void {
+    if (this.gainNode) this.gainNode.gain.value = this.baseOutputGain
   }
 
   // ─── Playback ──────────────────────────────────────────────────────────────
 
   play(): void {
-    if (!this.audioBuffer || !this.context || !this.gainNode) return
+    const media = this.media
+    if (!this.hasLocalMedia || !this.context || !media) return
     if (this._isPlaying) return
 
     // Resume AudioContext if suspended (browser autoplay policy)
     if (this.context.state === 'suspended') {
-      this.context.resume()
+      void this.context.resume()
     }
 
-    const source = this.context.createBufferSource()
-    source.buffer = this.audioBuffer
-    source.playbackRate.value = this._tempo
-    source.connect(this.gainNode)
-
-    source.onended = () => {
-      // Only the *natural* buffer end should emit `ended`. Programmatic
-      // `stop()` from pause/seek/stop clears this handler first so we never
-      // fire a fake "track ended" (that would desync UI and skip the queue).
-      if (this._finishingCapEnd) return
-      if (this._isPlaying) {
-        this._isPlaying = false
-        this._pausedAt = 0
-        this.stopTimeUpdates()
-        this.clearPlaybackEndCap()
-        if (this.gainNode) {
-          this.gainNode.gain.value = this.baseOutputGain
-        }
-        this.emit('ended', undefined)
-      }
+    if (Math.abs(media.currentTime - this._pausedAt) > 0.01) {
+      media.currentTime = this._pausedAt
     }
-
-    source.start(0, this._pausedAt)
-    this._startedAt = this.context.currentTime - this._pausedAt / this._tempo
+    media.playbackRate = this._tempo
     this._isPlaying = true
-    this.sourceNode = source
     this.applyOutputGain(this._pausedAt)
+    media.play().catch((err: unknown) => {
+      // A newer load/pause interrupting this play() is expected, not a failure.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      this._isPlaying = false
+      this.stopTimeUpdates()
+      this.emit('error', `Playback failed: ${String(err)}`)
+    })
     this.startTimeUpdates()
   }
 
   pause(): void {
-    if (!this._isPlaying || !this.context) return
-    this._pausedAt = (this.context.currentTime - this._startedAt) * this._tempo
-    const src = this.sourceNode
-    this.sourceNode = null
+    if (!this._isPlaying) return
     this._isPlaying = false
+    this._pausedAt = this.mediaPosition
     this.stopTimeUpdates()
-    if (src) {
-      src.onended = null
-      try {
-        src.stop()
-      } catch {
-        /* already stopped */
-      }
-    }
-    if (this.gainNode) {
-      this.gainNode.gain.value = this.baseOutputGain
-    }
+    this.media?.pause()
+    this.applyBaseGain()
   }
 
   stop(): void {
-    const src = this.sourceNode
-    this.sourceNode = null
     this._isPlaying = false
     this._pausedAt = 0
-    this._startedAt = 0
     this.loadTargetTrackId = null
     this._finishingCapEnd = false
     this.clearPlaybackEndCap()
     this.stopTimeUpdates()
-    if (src) {
-      src.onended = null
-      try {
-        src.stop()
-      } catch {
-        /* already stopped */
-      }
+    if (this.media) {
+      this.media.pause()
+      if (this.media.src) this.media.currentTime = 0
     }
   }
 
   seek(seconds: number): void {
-    const wasPlaying = this._isPlaying
-    if (wasPlaying) this.pause()
     const max =
       this._playbackEndCap != null ? Math.min(this._duration, this._playbackEndCap) : this._duration
     this._pausedAt = Math.max(0, Math.min(seconds, max))
-    if (wasPlaying) this.play()
+    if (this.media && this.hasLocalMedia) {
+      this.media.currentTime = this._pausedAt
+    }
+    if (this._isPlaying) this.applyOutputGain(this._pausedAt)
   }
 
   // ─── Controls ──────────────────────────────────────────────────────────────
 
   /**
-   * Set playback tempo without changing pitch.
+   * Set playback tempo without changing pitch (`preservesPitch` on the media element).
    * @param rate 1.0 = normal, 0.9 = -10%, 1.1 = +10%
    */
   setTempo(rate: number): void {
-    if (this.sourceNode && this.context && this._isPlaying) {
-      const elapsed = (this.context.currentTime - this._startedAt) * this._tempo
-      this._tempo = rate
-      this.sourceNode.playbackRate.value = rate
-      this._startedAt = this.context.currentTime - elapsed / rate
-    } else {
-      this._tempo = rate
-      if (this.sourceNode) {
-        this.sourceNode.playbackRate.value = rate
-      }
+    this._tempo = rate
+    if (this.media) {
+      // `defaultPlaybackRate` survives the next `src` change; `playbackRate` applies now.
+      this.media.defaultPlaybackRate = rate
+      this.media.playbackRate = rate
     }
-
-    // NOTE: AudioBufferSourceNode.playbackRate changes pitch along with tempo.
-    // For true pitch-preserving time stretching, replace the source node with
-    // a ScriptProcessorNode (or AudioWorkletNode) backed by soundtouch-ts.
-    //
-    // Full SoundTouch integration path:
-    //   1. Import SoundTouch from 'soundtouch-ts'
-    //   2. Create a ScriptProcessorNode (bufferSize 4096)
-    //   3. In onaudioprocess: feed input to SoundTouch, read output
-    //   4. SoundTouch.tempo = rate (not rate but actual tempo ratio)
-    //
-    // This stub uses native playbackRate as a functional placeholder that
-    // changes both tempo AND pitch, which is acceptable for early testing.
-    // See docs/audio-engine.md for the full implementation guide.
   }
 
   setVolume(volume: number): void {
@@ -416,10 +422,10 @@ export class AudioEngine {
   private startTimeUpdates(): void {
     const tick = () => {
       this.rafId = null
-      if (this._isPlaying && this.context) {
-        const elapsed = (this.context.currentTime - this._startedAt) * this._tempo
+      if (this._isPlaying) {
+        const elapsed = this.mediaPosition
         if (this._playbackEndCap != null && elapsed >= this._playbackEndCap) {
-          this.finishPlaybackAtCap(elapsed)
+          this.finishPlaybackAtCap()
           return
         }
         this.emit('timeupdate', elapsed)
@@ -448,8 +454,7 @@ export class AudioEngine {
   }
 
   get currentTime(): number {
-    if (!this.context || !this._isPlaying) return this._pausedAt
-    return (this.context.currentTime - this._startedAt) * this._tempo
+    return this._isPlaying ? this.mediaPosition : this._pausedAt
   }
 
   get duration(): number {
@@ -484,10 +489,13 @@ export class AudioEngine {
 
   destroy(): void {
     this.stop()
+    this.releaseMediaSource()
     this.loadedTrackId = null
     this.context?.close()
     this.context = null
     this.gainNode = null
+    // The element stays bound to the closed context's source node, so a fresh one is needed.
+    this.media = null
     this.audioBuffer = null
     this.listeners.clear()
   }

@@ -177,28 +177,9 @@ $: {
   wasPlayingBreak = playingBreak
 }
 
-async function togglePlay() {
-  if ($isPlaying) {
-    stopBreakTicker()
-    if (!$isPlaybackBreak) {
-      audioEngine.pause()
-    }
-    playerActions.pause()
-  } else {
-    if ($isPlaybackBreak) {
-      breakWallStart = performance.now()
-      breakElapsedAnchor = $playerState.currentTime
-      playerActions.play()
-      return
-    }
-    if ($currentTrack) {
-      await audioEngine.load($currentTrack)
-      audioEngine.setTempo($playerState.tempo)
-      syncAudioEnginePlaybackCap()
-    }
-    audioEngine.play()
-    playerActions.play()
-  }
+// The reactive break block above restarts / stops the break ticker when `isPlaying` flips.
+function togglePlay() {
+  void playerActions.togglePlayback()
 }
 
 async function previous() {

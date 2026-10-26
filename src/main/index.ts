@@ -22,6 +22,10 @@ function createWindow(): BrowserWindow {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
+      // Queue auto-advance starts the next track without a user gesture.
+      autoplayPolicy: 'no-user-gesture-required',
+      // Finals caps and break timers tick on requestAnimationFrame; keep them running when minimized.
+      backgroundThrottling: false,
     },
   })
 

@@ -4,6 +4,7 @@ import type {
   DanceId,
   LibraryDirectory,
   LibraryDiskSyncPayload,
+  PlaybackQueueItem,
   PlaybackState,
   Track,
   TrackListSort,
@@ -213,7 +214,7 @@ function playbackListContextMatchesSidebar(l: LibraryState, p: PlaybackState): b
 
 function visibleFilterSetMatchesQueue(l: LibraryState, p: PlaybackState): boolean {
   const qIds = p.queue
-    .filter((i): i is { kind: 'track'; track: Track } => i.kind === 'track')
+    .filter((i): i is Extract<PlaybackQueueItem, { kind: 'track' }> => i.kind === 'track')
     .map((i) => i.track.id)
   if (qIds.length === 0) return false
   const visible = filterTracksForListView(l.tracks, {

@@ -27,7 +27,7 @@ A cross-platform desktop dance music player built for ballroom and latin dancers
 | Desktop shell | Electron 30 |
 | Frontend | Svelte 4 + TypeScript |
 | Build tool | electron-vite + Vite 5 |
-| Audio engine | Web Audio API + SoundTouch (time stretching) |
+| Audio engine | Web Audio API + media element (`preservesPitch` time stretching) |
 | Persistence | electron-store (JSON, no database) |
 | Library scanning | fast-glob + music-metadata |
 | Spotify | Spotify Web API + PKCE OAuth |
@@ -111,7 +111,7 @@ docs/               Architecture and domain documentation
 ## Documentation
 
 - [Architecture](docs/architecture.md) — Process model, IPC flow, state management
-- [Audio Engine](docs/audio-engine.md) — Web Audio API, SoundTouch time stretching
+- [Audio Engine](docs/audio-engine.md) — Media element + Web Audio, pitch-preserving tempo, SoundTouch upgrade path
 - [Ballroom Context](docs/ballroom-context.md) — Domain knowledge: dances, BPM, rounds, heats
 - [Spotify Integration](docs/spotify-integration.md) — PKCE OAuth, Web API, Playback SDK
 - [UI / UX](docs/ui-ux.md) — Design system, tokens, interaction patterns
@@ -130,7 +130,7 @@ docs/               Architecture and domain documentation
 
 ## Roadmap
 
-- [ ] SoundTouch AudioWorklet integration (true pitch-preserving time stretch)
+- [ ] Verify built-in pitch-preserving stretch across the ±32% range; SoundTouch AudioWorklet if it falls short
 - [ ] Spotify Web Playback SDK integration
 - [ ] Spotify audio features API for automatic BPM detection
 - [ ] Competition Mode (configurable dance sequence, auto-advance)

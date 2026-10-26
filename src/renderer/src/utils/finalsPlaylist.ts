@@ -15,8 +15,7 @@ export function buildFinalsPlaybackQueue(
   const items: PlaybackQueueItem[] = []
   for (const row of rows) {
     if (row.kind === 'pause') {
-      const displayLabel =
-        row.label === 'Between finals' ? 'Break' : (row.label ?? 'Break')
+      const displayLabel = row.label === 'Between finals' ? 'Break' : (row.label ?? 'Break')
       items.push({ kind: 'break', seconds: row.seconds, label: displayLabel })
       continue
     }

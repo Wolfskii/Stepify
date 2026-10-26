@@ -1,19 +1,18 @@
 <script lang="ts">
 import { libraryActions, libraryState } from '../../stores/library.store'
-import { createEventDispatcher } from 'svelte'
-
-const dispatch = createEventDispatcher<{ search: string }>()
-
-let value = ''
 
 function handleInput(e: Event) {
-  value = (e.target as HTMLInputElement).value
-  libraryActions.setSearchQuery(value)
-  dispatch('search', value)
+  libraryActions.setSearchQuery((e.target as HTMLInputElement).value)
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && $libraryState.searchQuery) {
+    e.preventDefault()
+    clear()
+  }
 }
 
 function clear() {
-  value = ''
   libraryActions.setSearchQuery('')
 }
 </script>
@@ -29,12 +28,13 @@ function clear() {
   <input
     type="search"
     placeholder="Search tracks..."
-    bind:value
+    value={$libraryState.searchQuery}
     on:input={handleInput}
+    on:keydown={handleKeydown}
     aria-label="Search tracks"
   />
 
-  {#if value}
+  {#if $libraryState.searchQuery}
     <button class="search-bar__clear" on:click={clear} aria-label="Clear search">
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

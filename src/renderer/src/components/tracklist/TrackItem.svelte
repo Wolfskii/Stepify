@@ -22,7 +22,7 @@ import { logTrackReorder } from '../../utils/trackReorderDebug'
 
 const dispatch = createEventDispatcher<{
   reorderdragstart: { index: number }
-  reorderdragend: Record<string, never>
+  reorderdragend: null
 }>()
 
 export let track: Track

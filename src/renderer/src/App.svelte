@@ -1,18 +1,43 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import { get } from 'svelte/store'
 import AppShell from './components/layout/AppShell.svelte'
 import TitleBar from './components/layout/TitleBar.svelte'
 import { libraryActions } from './stores/library.store'
 import { initDanceOrdersFromSettings } from './stores/danceOrder.store'
 import { finalsActions } from './stores/finals.store'
 import { spotifyService } from './services/spotifyService'
-import { playerActions, playerState, isPlaybackBreak } from './stores/player.store'
+import { playerActions } from './stores/player.store'
 import { audioEngine } from './services/audioEngine'
 import type { BpmFromFilePayload } from './services/audioEngine'
 
-onMount(async () => {
-  // Load persisted library on startup
+// onMount ignores a cleanup returned from an async callback, so subscriptions are registered
+// synchronously here and the async startup work runs separately.
+onMount(() => {
+  window.addEventListener('keydown', handleGlobalKey)
+
+  const unsubscribers = [
+    window.electronAPI.library.onScanProgress((progress) => {
+      libraryActions.setScanning(true)
+      libraryActions.setScanProgress(progress)
+    }),
+    window.electronAPI.library.onScanComplete((payload) => {
+      void libraryActions.applyDiskSyncFromMain(payload, 'file-watcher')
+    }),
+    audioEngine.on<BpmFromFilePayload>('bpmFromFile', (payload) => {
+      playerActions.mergeCurrentTrackBpm(payload.bpm, payload.trackId)
+    }),
+  ]
+
+  void loadInitialState()
+
+  return () => {
+    window.removeEventListener('keydown', handleGlobalKey)
+    for (const unsubscribe of unsubscribers) unsubscribe()
+    audioEngine.destroy()
+  }
+})
+
+async function loadInitialState() {
   const tracksResult = await window.electronAPI.library.getTracks()
   if (tracksResult.success && tracksResult.data) {
     libraryActions.setTracks(tracksResult.data)
@@ -28,15 +53,6 @@ onMount(async () => {
     initDanceOrdersFromSettings(settingsResult.data)
     finalsActions.hydrateFromSettings(settingsResult.data.finalsSessions)
   }
-
-  window.electronAPI.library.onScanProgress((progress) => {
-    libraryActions.setScanning(true)
-    libraryActions.setScanProgress(progress)
-  })
-
-  window.electronAPI.library.onScanComplete((payload) => {
-    void libraryActions.applyDiskSyncFromMain(payload, 'file-watcher')
-  })
 
   // Re-scan configured folders for files added while the app was closed (or missed).
   if (dirsResult.success && dirsResult.data && dirsResult.data.length > 0) {
@@ -54,42 +70,19 @@ onMount(async () => {
 
   // Check Spotify auth state
   await spotifyService.checkAuthStatus()
+}
 
-  // Global keyboard shortcuts
-  window.addEventListener('keydown', handleGlobalKey)
-
-  const unsubBpm = audioEngine.on<BpmFromFilePayload>('bpmFromFile', (payload) => {
-    playerActions.mergeCurrentTrackBpm(payload.bpm, payload.trackId)
-  })
-
-  return () => {
-    window.removeEventListener('keydown', handleGlobalKey)
-    unsubBpm()
-    audioEngine.destroy()
-  }
-})
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+}
 
 function handleGlobalKey(e: KeyboardEvent) {
-  // Don't intercept when an input/textarea is focused
-  const tag = (e.target as HTMLElement).tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
-  if (e.code === 'Space') {
+  if (isTextEntryTarget(e.target)) return
+  if (e.code === 'Space' && !e.repeat) {
     e.preventDefault()
-    const st = get(playerState)
-    if (get(isPlaybackBreak)) {
-      if (st.isPlaying) playerActions.pause()
-      else playerActions.play()
-      return
-    }
-    const playing = audioEngine.isPlaying
-    if (playing) {
-      audioEngine.pause()
-      playerActions.pause()
-    } else {
-      audioEngine.play()
-      playerActions.play()
-    }
+    void playerActions.togglePlayback()
   }
 }
 </script>

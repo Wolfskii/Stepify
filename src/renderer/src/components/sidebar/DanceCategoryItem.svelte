@@ -22,7 +22,7 @@ export let reorderAnimating = false
 
 const dispatch = createEventDispatcher<{
   reorderdragstart: { index: number; style: DanceStyle }
-  reorderdragend: Record<string, never>
+  reorderdragend: null
 }>()
 
 let rowEl: HTMLDivElement
@@ -75,7 +75,7 @@ function onRowDragStart(e: DragEvent) {
 
 function onRowDragEnd() {
   reorderHover = false
-  dispatch('reorderdragend', {})
+  dispatch('reorderdragend')
   queueMicrotask(() => clearDanceListReorderDrag())
 }
 

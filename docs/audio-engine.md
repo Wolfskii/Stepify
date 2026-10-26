@@ -2,24 +2,27 @@
 
 ## Overview
 
-The audio engine lives entirely in the renderer process (`src/renderer/src/services/audioEngine.ts`). It uses the **Web Audio API** — a low-level, high-performance audio graph available in Chromium.
+The audio engine lives entirely in the renderer process (`src/renderer/src/services/audioEngine.ts`). It plays through a hidden `HTMLAudioElement` routed into the **Web Audio API** graph, so Chromium's media pipeline does the time stretching while Web Audio handles gain.
 
 The engine exposes a simple interface to the rest of the app:
 - Load a track (local file or Spotify)
 - Play, pause, stop, seek
-- Set tempo (playback rate)
+- Set tempo (pitch-preserving playback rate)
 - Set volume
 - Subscribe to time update and ended events
 
-For local tracks, playback now also applies **per-track loudness normalization** so songs stay in a similar perceived dB range during queues.
+For local tracks, playback also applies **per-track loudness normalization** so songs stay in a similar perceived dB range during queues.
 
 ---
 
-## Current Implementation (Stub)
+## Current Implementation
 
-The current implementation uses `AudioBufferSourceNode.playbackRate` to change tempo. This is fast and simple but **changes pitch along with tempo** (the "chipmunk effect" at higher speeds, "slow-motion voice" at lower speeds).
+Tempo is set with `HTMLMediaElement.playbackRate` and `preservesPitch = true`. Chromium time-stretches the audio inside the media pipeline (WSOLA-style), so the tempo slider changes speed without the "chipmunk" or "slow-motion voice" effect. Because the stretching runs off the UI thread, Svelte work does not cause audible glitches.
 
-This is acceptable for initial development and testing but **must be upgraded** before release.
+Each local file is read once through IPC. The same bytes feed two consumers:
+
+- A `Blob` URL, assigned to the media element for playback.
+- `AudioContext.decodeAudioData`, which produces the `AudioBuffer` used for loudness estimation and BPM detection.
 
 ### Playback Flow
 
@@ -29,17 +32,35 @@ main process                        renderer process
 libraryService                      AudioEngine.load(track)
   → reads file                          │
   → returns ArrayBuffer ──────────────► │
+                                        ├─► new Blob → URL.createObjectURL → <audio>.src
                                         │
-                             AudioContext.decodeAudioData(buffer)
+                                        ├─► AudioContext.decodeAudioData → AudioBuffer
+                                        │       (loudness gain, BPM detection)
                                         │
-                             AudioBufferSourceNode
+                             MediaElementAudioSourceNode (one per context)
                                         │
-                             source.playbackRate.value = tempo
+                             <audio>.playbackRate = tempo, preservesPitch = true
                                         │
-                             GainNode (volume)
+                             GainNode (volume × normalization × finals fade)
                                         │
                              AudioContext.destination (speakers)
 ```
+
+### Trade-offs and upgrade path
+
+- `preservesPitch` is built into Chromium and needs no extra dependency, which is why it replaced the unused `soundtouch-ts` path.
+- Its quality at extreme ratios is not tuned for dance practice. The app's working range is the tempo slider limits (`TEMPO_MIN_PERCENT` / `TEMPO_MAX_PERCENT`, ±32%). If stretched artifacts are audible in that range, the upgrade path is a SoundTouch-based `AudioWorkletNode` (see below).
+- The media element is one long-lived instance per engine. `createMediaElementSource` can only be called once per element, so the source node is created with the `AudioContext` and reused across loads.
+
+### SoundTouch upgrade path (not implemented)
+
+If built-in stretching is not good enough, the replacement is an **AudioWorkletNode** running SoundTouch compiled to WebAssembly:
+
+1. Compile SoundTouch to WebAssembly.
+2. Load the WASM module inside an `AudioWorkletProcessor`.
+3. Send tempo changes to the processor over its `MessagePort`.
+
+A `ScriptProcessorNode` version is not recommended: it runs on the main thread and causes UI jank.
 
 ---
 
@@ -76,72 +97,6 @@ This keeps playback level changes between songs more controlled without changing
 
 ---
 
-## Planned: Pitch-Preserving Tempo (SoundTouch)
-
-To achieve proper pitch-preserving time stretching (what professional DJ software does), replace the `AudioBufferSourceNode` with a **ScriptProcessorNode** backed by the `soundtouch-ts` library.
-
-### Why SoundTouch?
-
-SoundTouch implements **WSOLA** (Waveform Similarity-based Overlap-Add) time stretching. This separates tempo (speed) from pitch, allowing:
-- Slow down 30%: music sounds slower, pitch unchanged
-- Speed up 20%: music sounds faster, pitch unchanged
-
-### Integration Plan
-
-```typescript
-import { SoundTouch, SimpleFilter, WebAudioBufferSource } from 'soundtouch-ts'
-
-// In AudioEngine.play():
-const context = this.ensureContext()
-const bufferSize = 4096
-const node = context.createScriptProcessor(bufferSize, 2, 2)
-
-const soundTouch = new SoundTouch()
-soundTouch.tempo = this._tempo  // 1.0 = normal
-
-const source = new WebAudioBufferSource(this.audioBuffer!)
-const filter = new SimpleFilter(source, soundTouch)
-
-node.onaudioprocess = (e: AudioProcessingEvent) => {
-  const left = e.outputBuffer.getChannelData(0)
-  const right = e.outputBuffer.getChannelData(1)
-  const interleaved = new Float32Array(bufferSize * 2)
-  const framesExtracted = filter.extract(interleaved, bufferSize)
-  if (framesExtracted === 0) this.emit('ended', undefined)
-  for (let i = 0; i < framesExtracted; i++) {
-    left[i] = interleaved[i * 2]
-    right[i] = interleaved[i * 2 + 1]
-  }
-}
-
-node.connect(this.gainNode!)
-// Note: ScriptProcessorNode is deprecated in favour of AudioWorkletNode
-// but is used here for simplicity. See the AudioWorklet migration note below.
-```
-
-### Setting Tempo
-
-```typescript
-setTempo(rate: number): void {
-  this._tempo = rate
-  if (this.soundTouch) {
-    this.soundTouch.tempo = rate  // NOT playbackRate
-  }
-}
-```
-
-### AudioWorklet Migration (Future)
-
-`ScriptProcessorNode` runs on the main thread and can cause UI jank. The correct long-term approach is an **AudioWorkletNode**:
-
-1. Compile SoundTouch to WebAssembly
-2. Load the WASM module inside an `AudioWorkletProcessor`
-3. Communicate tempo changes via `MessagePort`
-
-This is out of scope for the MVP but documented here for future contributors.
-
----
-
 ## Spotify Playback
 
 Spotify tracks cannot be decoded as `ArrayBuffer` — they are DRM-protected. Playback uses the **Spotify Web Playback SDK** instead.
@@ -149,6 +104,7 @@ Spotify tracks cannot be decoded as `ArrayBuffer` — they are DRM-protected. Pl
 The SDK creates its own audio device. The `AudioEngine` delegates Spotify tracks to `spotifyService.playTrack()`.
 
 The player store's `PlaybackState` remains the source of truth regardless of which backend is playing. Both backends must:
+
 - Update `playerState.currentTime` on tick
 - Emit an `ended` equivalent when the track finishes
 - Respond to `play()`, `pause()`, `seek()` calls
@@ -182,10 +138,12 @@ engine.on('error', (msg: string) => {
 
 Listeners are registered in `NowPlayingBar.svelte` via `onMount` and cleaned up via the returned unsubscribe function in `onDestroy`.
 
+Queue auto-advance calls `play()` without a user gesture, so the main window sets `autoplayPolicy: 'no-user-gesture-required'` (`src/main/index.ts`).
+
 ---
 
 ## Supported Formats
 
 The library scanner accepts: `mp3`, `flac`, `wav`, `ogg`, `aac`, `m4a`, `opus`, `wma`.
 
-The Web Audio API's `decodeAudioData` supports all formats that Chromium can decode, which includes all of the above. `wma` support may vary across platforms.
+Playback goes through Chromium's media stack, and `decodeAudioData` is used for analysis. Both support everything Chromium can decode. `wma` support may vary across platforms.

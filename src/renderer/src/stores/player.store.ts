@@ -193,8 +193,27 @@ export const playerActions = {
     playerState.update((s) => ({ ...s, isPlaying: false }))
   },
 
-  togglePlay() {
-    playerState.update((s) => ({ ...s, isPlaying: !s.isPlaying }))
+  /**
+   * Play/pause for the transport button and the Space shortcut. Breaks are wall-clock segments with
+   * no audio, so only the store flag changes; tracks are (re)loaded so the Finals cap is applied.
+   */
+  async togglePlayback() {
+    const s = get(playerState)
+    const onBreak = isQueueBreakItem(s)
+    if (s.isPlaying) {
+      if (!onBreak) audioEngine.pause()
+      playerActions.pause()
+      return
+    }
+    if (!onBreak) {
+      if (s.track) {
+        await audioEngine.load(s.track)
+        audioEngine.setTempo(get(playerState).tempo)
+        syncAudioEnginePlaybackCap()
+      }
+      audioEngine.play()
+    }
+    playerActions.play()
   },
 
   setCurrentTime(time: number) {

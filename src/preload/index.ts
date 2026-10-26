@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, type IpcRendererEvent, ipcRenderer, webUtils } from 'electron'
 import {
   IPC_AUDIO,
   IPC_LIBRARY,
@@ -18,6 +18,15 @@ import type {
   Track,
   UpdateTrackMetadataPayload,
 } from '../shared/types'
+
+/** Listen on a main→renderer channel; the returned function removes the listener. */
+function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
+  const handler = (_event: IpcRendererEvent, payload: T): void => callback(payload)
+  ipcRenderer.on(channel, handler)
+  return () => {
+    ipcRenderer.removeListener(channel, handler)
+  }
+}
 
 /**
  * The electronAPI object is exposed to the renderer on window.electronAPI.
@@ -85,13 +94,12 @@ const api = {
     openLibraryFolder: (dirPath: string): Promise<IpcResponse<void>> =>
       ipcRenderer.invoke(IPC_LIBRARY.OPEN_LIBRARY_FOLDER, dirPath),
 
-    onScanComplete: (callback: (payload: LibraryDiskSyncPayload) => void) => {
-      ipcRenderer.on(IPC_LIBRARY.SCAN_COMPLETE, (_event, payload) => callback(payload))
-    },
+    onScanComplete: (callback: (payload: LibraryDiskSyncPayload) => void): (() => void) =>
+      subscribe(IPC_LIBRARY.SCAN_COMPLETE, callback),
 
-    onScanProgress: (callback: (progress: { current: number; total: number }) => void) => {
-      ipcRenderer.on(IPC_LIBRARY.SCAN_PROGRESS, (_event, progress) => callback(progress))
-    },
+    onScanProgress: (
+      callback: (progress: { current: number; total: number }) => void,
+    ): (() => void) => subscribe(IPC_LIBRARY.SCAN_PROGRESS, callback),
   },
 
   // ─── Audio ────────────────────────────────────────────────────────────────
@@ -119,9 +127,8 @@ const api = {
 
     getToken: (): Promise<IpcResponse<string>> => ipcRenderer.invoke(IPC_SPOTIFY.GET_TOKEN),
 
-    onLoginComplete: (callback: (success: boolean) => void) => {
-      ipcRenderer.on(IPC_SPOTIFY.LOGIN_COMPLETE, (_event, success) => callback(success))
-    },
+    onLoginComplete: (callback: (success: boolean) => void): (() => void) =>
+      subscribe(IPC_SPOTIFY.LOGIN_COMPLETE, callback),
   },
 
   // ─── Settings ─────────────────────────────────────────────────────────────
@@ -143,15 +150,8 @@ const api = {
     close: () => ipcRenderer.send(IPC_WINDOW.CLOSE),
     toggleFullscreen: () => ipcRenderer.send(IPC_WINDOW.TOGGLE_FULLSCREEN),
     getMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_WINDOW.GET_MAXIMIZED),
-    onMaximizedChange: (callback: (isMaximized: boolean) => void): (() => void) => {
-      const handler = (_event: unknown, value: boolean): void => {
-        callback(value)
-      }
-      ipcRenderer.on(IPC_WINDOW.MAXIMIZED_CHANGED, handler)
-      return () => {
-        ipcRenderer.removeListener(IPC_WINDOW.MAXIMIZED_CHANGED, handler)
-      }
-    },
+    onMaximizedChange: (callback: (isMaximized: boolean) => void): (() => void) =>
+      subscribe(IPC_WINDOW.MAXIMIZED_CHANGED, callback),
   },
 }
 

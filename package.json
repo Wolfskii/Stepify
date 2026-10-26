@@ -15,9 +15,10 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "preview": "electron-vite preview",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:svelte",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck:svelte": "svelte-check --tsconfig ./tsconfig.web.json --threshold error",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
@@ -25,14 +26,13 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
-    "dotenv": "^16.4.5",
     "chokidar": "^3.6.0",
+    "dotenv": "^16.4.5",
     "electron-store": "^8.2.0",
     "fast-glob": "^3.3.2",
     "flac-tagger": "^2.0.0",
     "music-metadata": "^7.14.0",
     "node-id3": "^0.2.9",
-    "soundtouch-ts": "^1.1.1",
     "web-audio-beat-detector": "^8.2.36"
   },
   "devDependencies": {
